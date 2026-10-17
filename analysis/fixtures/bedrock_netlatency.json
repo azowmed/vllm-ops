@@ -1,0 +1,15 @@
+{
+  "target": "bedrock",
+  "base_url": "https://bedrock-mantle.eu-north-1.api.aws",
+  "probe_url": "https://bedrock-mantle.eu-north-1.api.aws/v1/models",
+  "client_hostname": "bench-gpu-01",
+  "cloud_provider": "scaleway",
+  "cloud_zone": "fr-par-2",
+  "samples": [
+    {"time_connect_s": 0.018, "time_ttfb_s": 0.071, "http_code": 401},
+    {"time_connect_s": 0.017, "time_ttfb_s": 0.069, "http_code": 401},
+    {"time_connect_s": 0.019, "time_ttfb_s": 0.072, "http_code": 401}
+  ],
+  "min_time_connect_s": 0.017,
+  "min_time_ttfb_s": 0.069
+}

@@ -1,0 +1,11 @@
+{
+  "model": "Qwen/Qwen3-32B-FP8",
+  "served_model_name": "Qwen/Qwen3-32B-FP8",
+  "max_model_len": 8192,
+  "gpu_memory_utilization": 0.90,
+  "cold_start_seconds": 118,
+  "kv_cache_tokens": 31800,
+  "max_concurrency": 3.88,
+  "max_concurrency_ctx_tokens": 8192,
+  "container_started_at": "2026-10-14T11:58:00.000000000Z"
+}

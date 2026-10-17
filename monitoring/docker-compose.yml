@@ -1,0 +1,68 @@
+# Lightweight live-monitoring stack for the vLLM benchmark.
+#
+# All three services use host networking and bind to 127.0.0.1 ONLY, so nothing
+# is exposed on the public interface (the default Scaleway firewall can let
+# inbound traffic through). Reach them through the SSH tunnel in the README.
+#
+#   docker compose up -d                 # Prometheus + Grafana
+#   docker compose --profile gpu up -d   # + dcgm-exporter (needs the GPU)
+#
+# dcgm-exporter lives in the `gpu` profile because it needs the NVIDIA runtime;
+# Prometheus and Grafana run anywhere.
+services:
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v2.55.1}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.listen-address=127.0.0.1:9090   # loopback only
+      - --storage.tsdb.retention.time=2d
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/grafana:11.3.0}
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # Bind the HTTP server to loopback only (port stays 3000).
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
+      # Anonymous Admin, no login screen. This is acceptable ONLY because the UI
+      # is reachable solely through the SSH tunnel; never expose this publicly.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  dcgm-exporter:
+    image: ${DCGM_EXPORTER_IMAGE:-nvcr.io/nvidia/k8s/dcgm-exporter:4.4.2-4.7.1-ubuntu22.04}
+    profiles: ["gpu"]
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN            # required by DCGM for the DCGM_FI_PROF_* profiling metrics
+    volumes:
+      - ./dcgm-metrics.csv:/etc/dcgm-exporter/custom-counters.csv:ro
+    command:
+      - -f
+      - /etc/dcgm-exporter/custom-counters.csv   # our counter set incl. DCGM_FI_PROF_*
+      - -a
+      - 127.0.0.1:9400                           # loopback only
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  prometheus-data:
+  grafana-data:

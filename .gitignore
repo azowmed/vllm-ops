@@ -1,0 +1,27 @@
+# Secrets / local config
+.env
+*.pem
+
+# Benchmark outputs (kept out of git; results/.gitkeep preserves the dir)
+results/*
+!results/.gitkeep
+
+# Dashboards downloaded at runtime by monitoring/fetch_dashboards.sh
+monitoring/grafana/dashboards/vllm.json
+monitoring/grafana/dashboards/dcgm.json
+
+# Analysis artifacts
+analysis/plots/
+*.png
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS cruft
+.DS_Store
+
+# Local tooling config (not part of the public project)
+.claude/
