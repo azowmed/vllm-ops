@@ -64,7 +64,7 @@ net="${RESULTS_DIR}/${TARGET}_netlatency.json"
   min_c=""; min_t=""
   for i in 1 2 3; do
     read -r tc tt code < <(curl -o /dev/null -s --max-time 10 "${auth_args[@]}" \
-      -w '%{time_connect} %{time_starttransfer} %{http_code}' "${probe_url}" 2>/dev/null || echo "0 0 000")
+      -w '%{time_connect} %{time_starttransfer} %{http_code}' "${probe_url}" 2>/dev/null || echo "0 0 000") || true
     sep=","; [[ "${i}" -eq 3 ]] && sep=""
     printf '    {"time_connect_s": %s, "time_ttfb_s": %s, "http_code": %s}%s\n' "${tc}" "${tt}" "${code}" "${sep}"
     [[ -z "${min_c}" ]] && min_c="${tc}"; awk "BEGIN{exit !(${tc}<${min_c})}" && min_c="${tc}"

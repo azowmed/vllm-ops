@@ -17,7 +17,7 @@ DCGM_FI_PROF_PIPE_FP16_ACTIVE,   gauge, Ratio of cycles the fp16 pipe was active
 DCGM_FI_PROF_PIPE_FP32_ACTIVE,   gauge, Ratio of cycles the fp32 pipe was active.
 
 # --- Coarse device metrics (incl. the nvidia-smi-style utilisation) ---
-DCGM_FI_DEV_GPU_UTIL,      gauge, GPU utilization (nvidia-smi style, in %).
+DCGM_FI_DEV_GPU_UTIL,      gauge, GPU utilization (nvidia-smi style; in %).
 DCGM_FI_DEV_MEM_COPY_UTIL, gauge, Memory-copy (framebuffer BW) utilization (in %).
 DCGM_FI_DEV_FB_USED,       gauge, Framebuffer memory used (in MiB).
 DCGM_FI_DEV_POWER_USAGE,   gauge, Power draw (in W).

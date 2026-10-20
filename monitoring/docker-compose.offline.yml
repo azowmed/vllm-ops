@@ -1,0 +1,10 @@
+services:
+  prometheus:
+    user: "0"                                  # bind-mounted git dir must be writable by the TSDB docker compose -f docker-compose.yml -f docker-compose.offline.yml up -d prometheus grafana
+                                                # open http://127.0.0.1:3000, set the time range to your run window (dcgm needs no GPU here)
+    volumes:
+      - ./snapshots/prometheus-data:/prometheus   # committed data instead of the live volume
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.listen-address=127.0.0.1:9090
+      - --storage.tsdb.retention.time=10y

@@ -1,0 +1,15 @@
+{
+  "target": "vllm",
+  "base_url": "http://127.0.0.1:8000",
+  "probe_url": "http://127.0.0.1:8000/v1/models",
+  "client_hostname": "scw-charming-euler",
+  "cloud_provider": "scaleway",
+  "cloud_zone": "pl-waw-2",
+  "samples": [
+    {"time_connect_s": 0.000134, "time_ttfb_s": 0.001278, "http_code": 200},
+    {"time_connect_s": 0.000098, "time_ttfb_s": 0.000698, "http_code": 200},
+    {"time_connect_s": 0.000088, "time_ttfb_s": 0.000683, "http_code": 200}
+  ],
+  "min_time_connect_s": 0.000088,
+  "min_time_ttfb_s": 0.000683
+}
