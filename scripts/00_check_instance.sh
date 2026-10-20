@@ -44,9 +44,22 @@ log "Pulling ${VLLM_IMAGE} (this can take a few minutes)..."
 docker pull "${VLLM_IMAGE}"
 
 # --- GPU reachable from inside a container --------------------------------
+# The image entrypoint is `vllm serve`, so a bare
+#   docker run ... "${VLLM_IMAGE}" nvidia-smi -L
+# would run `vllm serve nvidia-smi -L` (nvidia-smi treated as the model), not
+# nvidia-smi. Override the entrypoint so `-L` reaches nvidia-smi itself.
 log "Probing the GPU from inside a container..."
-docker run --rm --gpus all "${VLLM_IMAGE}" nvidia-smi -L \
-  || die "'--gpus all' failed: the NVIDIA Container Toolkit is not wired into Docker."
+if probe_out="$(docker run --rm --gpus all --entrypoint nvidia-smi "${VLLM_IMAGE}" -L 2>&1)"; then
+  printf '%s\n' "${probe_out}"
+elif printf '%s\n' "${probe_out}" | grep -Eqi 'could not select device driver|nvidia-container|capabilities: \[\[gpu\]\]|unknown runtime|response from daemon.*(gpu|nvidia|runtime|driver)'; then
+  die "'--gpus all' failed: the NVIDIA Container Toolkit is not wired into Docker.
+${probe_out}"
+else
+  # Not a Docker GPU/runtime error (e.g. nvidia-smi ran but found no device, or
+  # some other failure): surface what actually happened instead of blaming the toolkit.
+  die "GPU probe failed:
+${probe_out}"
+fi
 
 # --- CUDA compatibility: image torch CUDA <= driver max CUDA --------------
 IMAGE_CUDA="$(docker run --rm --gpus all --entrypoint python3 "${VLLM_IMAGE}" \
