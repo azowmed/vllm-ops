@@ -2,20 +2,15 @@
 .env
 *.pem
 
-# Benchmark outputs (kept out of git; results/.gitkeep preserves the dir)
-results/*
-!results/.gitkeep
+# Run outputs under experiments/<gpu>/<run>/ ARE committed (raw data, summary,
+# charts, Prometheus snapshot): they are the evidence findings/ refers to.
 
-# Dashboards downloaded at runtime by monitoring/fetch_dashboards.sh
-monitoring/grafana/dashboards/vllm.json
-monitoring/grafana/dashboards/dcgm.json
+# Official vLLM dashboard, downloaded at runtime by fetch_dashboards.sh
+# (dcgm.json is committed so the offline viewer works without network).
+experiments/src/monitoring/grafana/dashboards/vllm.json
 
-# Offline viewer's writable TSDB working copy (seeded from snapshots/ by seed_offline.sh)
-monitoring/.offline-run/
-
-# Analysis artifacts
-analysis/plots/
-*.png
+# Offline viewer's writable TSDB working copy (seeded from a run by seed_offline.sh)
+experiments/src/monitoring/.offline-run/
 
 # Python
 __pycache__/

@@ -1,0 +1,57 @@
+# Offline viewer for a run's COMMITTED benchmark data. Self-contained — run it
+# ALONE (not merged with docker-compose.yml) and it works on both macOS and Linux.
+#
+# Seed the writable working copy from the run you want to view, then bring it up:
+#   ./seed_offline.sh ../../h100/2026-10-20_bf16-kv   # <run>/prometheus-snapshot -> .offline-run/
+#   docker compose -f docker-compose.offline.yml up -d
+#   open the preset dashboard URL (bare :3000 defaults to the last 15 min = empty)
+#   docker compose -f docker-compose.offline.yml down
+#
+# Differences from the live stack (docker-compose.yml), all so it works off-box:
+#   - bridge networking + published loopback ports (host networking doesn't reach
+#     the Mac host from the Docker VM); Grafana reaches Prometheus by service name;
+#   - reads a WRITABLE COPY (.offline-run/, git-ignored) of the committed TSDB
+#     snapshot, so Prometheus' replay/compaction never mutates the git archive;
+#   - 10y retention so the imported run is never pruned (live stack keeps 2d);
+#   - no dcgm-exporter (no GPU needed — the data is already in the snapshot).
+services:
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v2.55.1}
+    restart: unless-stopped
+    user: "0"                                   # the working-copy dir must be writable by the TSDB
+    ports:
+      # Bind 0.0.0.0 inside the VM: colima/Lima reliably forwards that to the Mac's
+      # 127.0.0.1 (it does NOT expose it on the Mac's network). Publishing to the
+      # VM's 127.0.0.1 is the case colima forwards unreliably.
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Writable working copy, SEEDED from <run>/prometheus-snapshot by
+      # seed_offline.sh. Prometheus replays + compacts the
+      # TSDB, so it must not write into the committed git archive directly.
+      - ./.offline-run/prometheus:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # MUST be set: overriding `command:` drops the image's default CMD, and without
+      # this Prometheus falls back to the relative default `data/` (-> /prometheus/data)
+      # and ignores the snapshot at the mount root.
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=10y
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/grafana:11.3.0}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # see prometheus note: 0.0.0.0-in-VM so colima forwards to Mac localhost
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      # Offline datasource points at the prometheus SERVICE (bridge DNS), not 127.0.0.1.
+      - ./offline/datasources:/etc/grafana/provisioning/datasources:ro
+      # Reuse the committed dashboard + its provider unchanged.
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
