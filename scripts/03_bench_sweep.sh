@@ -93,6 +93,10 @@ for c in ${CONCURRENCIES}; do
 
   bench=(
     run --rm --network host
+    # High --max-concurrency opens ~one socket per in-flight request; the default
+    # container nofile (~1024) causes "[Errno 24] Too many open files" well before
+    # the server is the bottleneck. Give the client plenty of descriptors.
+    --ulimit nofile=1048576:1048576
     -e "OPENAI_API_KEY=${API_KEY}"
     -v "${RESULTS_DIR}:/results"
     -v "${HF_CACHE}:/root/.cache/huggingface"

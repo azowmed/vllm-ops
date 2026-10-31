@@ -10,6 +10,9 @@ results/*
 monitoring/grafana/dashboards/vllm.json
 monitoring/grafana/dashboards/dcgm.json
 
+# Offline viewer's writable TSDB working copy (seeded from snapshots/ by seed_offline.sh)
+monitoring/.offline-run/
+
 # Analysis artifacts
 analysis/plots/
 *.png

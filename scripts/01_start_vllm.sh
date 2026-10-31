@@ -25,6 +25,7 @@ docker_args=(
   --name "${VLLM_CONTAINER_NAME}"
   --gpus all
   --ipc=host                                   # vLLM needs a large /dev/shm
+  --ulimit nofile=1048576:1048576              # thousands of concurrent connections -> many server FDs
   -p "${VLLM_HOST_BIND}:${VLLM_PORT}:8000"      # loopback-only publish
   -v "${HF_CACHE}:/root/.cache/huggingface"
   --restart no
