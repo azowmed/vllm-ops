@@ -202,5 +202,47 @@
     "kv_cache_tokens": 150240,
     "cold_start_s": 2418,
     "floor_tpot_ms_c1": 20.455168805882053
+  },
+  "telemetry_coverage": {
+    "c1": {
+      "rows_with_dcgm": 0,
+      "rows": 277
+    },
+    "c1024": {
+      "rows_with_dcgm": 266,
+      "rows": 266
+    },
+    "c128": {
+      "rows_with_dcgm": 0,
+      "rows": 139
+    },
+    "c16": {
+      "rows_with_dcgm": 0,
+      "rows": 47
+    },
+    "c2048": {
+      "rows_with_dcgm": 288,
+      "rows": 288
+    },
+    "c256": {
+      "rows_with_dcgm": 0,
+      "rows": 264
+    },
+    "c32": {
+      "rows_with_dcgm": 0,
+      "rows": 57
+    },
+    "c512": {
+      "rows_with_dcgm": 95,
+      "rows": 502
+    },
+    "c64": {
+      "rows_with_dcgm": 0,
+      "rows": 82
+    },
+    "c8": {
+      "rows_with_dcgm": 0,
+      "rows": 59
+    }
   }
 }

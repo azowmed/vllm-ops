@@ -52,6 +52,21 @@ Measured facts to drop into findings/predictions.md:
 - `cold_start_s` = **2418**
 - `floor_tpot_ms_c1` = **20.46**
 
+## GPU telemetry coverage
+
+DCGM profiling data (DRAM / tensor-core activity) was missing for part of these levels. Levels with no DCGM data at all have no telemetry chart.
+
+| level | rows with DCGM data |
+|---|---|
+| c1 | 0/277 (none) |
+| c8 | 0/59 (none) |
+| c16 | 0/47 (none) |
+| c32 | 0/57 (none) |
+| c64 | 0/82 (none) |
+| c128 | 0/139 (none) |
+| c256 | 0/264 (none) |
+| c512 | 95/502 |
+
 ## Charts
 
 ![ttft_p95.png](charts/ttft_p95.png)
@@ -64,24 +79,10 @@ Measured facts to drop into findings/predictions.md:
 
 ![cost.png](charts/cost.png)
 
-![telemetry_c1.png](charts/telemetry_c1.png)
-
 ![telemetry_c1024.png](charts/telemetry_c1024.png)
-
-![telemetry_c128.png](charts/telemetry_c128.png)
-
-![telemetry_c16.png](charts/telemetry_c16.png)
 
 ![telemetry_c2048.png](charts/telemetry_c2048.png)
 
-![telemetry_c256.png](charts/telemetry_c256.png)
-
-![telemetry_c32.png](charts/telemetry_c32.png)
-
 ![telemetry_c512.png](charts/telemetry_c512.png)
-
-![telemetry_c64.png](charts/telemetry_c64.png)
-
-![telemetry_c8.png](charts/telemetry_c8.png)
 
 

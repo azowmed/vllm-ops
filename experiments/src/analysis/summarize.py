@@ -180,6 +180,18 @@ def line_plot(out_dir, fname, title, ylabel, series):
     return path
 
 
+def telemetry_coverage(results_dir):
+    """{level: (rows_with_dcgm, rows)} from telemetry_c*.csv (no matplotlib needed)."""
+    cov = {}
+    for path in sorted(glob.glob(os.path.join(results_dir, "telemetry_c*.csv"))):
+        level = re.search(r"telemetry_(c\d+)\.csv$", os.path.basename(path))
+        level = level.group(1) if level else os.path.basename(path)
+        with open(path) as fh:
+            rows = list(csv.DictReader(fh))
+        cov[level] = (sum(1 for r in rows if _f(r.get("dram_active")) is not None), len(rows))
+    return cov
+
+
 def telemetry_plots(results_dir, out_dir):
     made = []
     if not HAVE_MPL:
@@ -199,8 +211,8 @@ def telemetry_plots(results_dir, out_dir):
                 xs.append(ep - t0)
                 dram.append(_f(r.get("dram_active")))
                 tensor.append(_f(r.get("tensor_active")))
-        if not xs:
-            continue
+        if not xs or all(v is None for v in dram + tensor):
+            continue   # no DCGM data at all -> no blank chart; reported in summary.md
         fig, ax = plt.subplots(figsize=(7, 4.2))
         ax.plot(xs, dram, label="DRAM active")
         ax.plot(xs, tensor, label="Tensor-core active")
@@ -372,6 +384,20 @@ def main() -> int:
         md.append("_matplotlib not installed; charts skipped (pip install matplotlib)._\n")
 
     charts = [c for c in charts if c]
+
+    cov = telemetry_coverage(results_dir)
+    gaps = {lv: rc for lv, rc in cov.items() if rc[0] < rc[1]}
+    if gaps:
+        md.append("## GPU telemetry coverage\n")
+        md.append("DCGM profiling data (DRAM / tensor-core activity) was missing for part of these "
+                  "levels. Levels with no DCGM data at all have no telemetry chart.\n")
+        md.append("| level | rows with DCGM data |")
+        md.append("|---|---|")
+        for lv in sorted(gaps, key=lambda s: int(s[1:]) if s[1:].isdigit() else 0):
+            n, tot = gaps[lv]
+            md.append(f"| {lv} | {n}/{tot}{' (none)' if n == 0 else ''} |")
+        md.append("")
+    summary["telemetry_coverage"] = {lv: {"rows_with_dcgm": n, "rows": t} for lv, (n, t) in cov.items()}
     if charts:
         md.append("## Charts\n")
         for c in charts:

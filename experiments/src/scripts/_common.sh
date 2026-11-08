@@ -78,6 +78,7 @@ fi
 # ---- telemetry -----------------------------------------------------------
 : "${DCGM_ENDPOINT:=http://127.0.0.1:9400/metrics}"
 : "${TELEMETRY_HZ:=1}"
+: "${REQUIRE_DCGM:=1}"                # 03 refuses to sweep vLLM without DCGM profiling data
 
 # ---- cloud metadata ------------------------------------------------------
 : "${CLOUD_PROVIDER:=}"

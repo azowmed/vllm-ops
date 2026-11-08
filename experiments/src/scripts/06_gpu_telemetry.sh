@@ -26,7 +26,13 @@ perf_after="${RESULTS_DIR}/perf_${label}_after.txt"
 
 snapshot_perf() { nvidia-smi -q -d PERFORMANCE,CLOCK > "$1" 2>&1 || echo "nvidia-smi perf snapshot failed" > "$1"; }
 
-finish() { snapshot_perf "${perf_after}"; log "Telemetry stopped (${label}); perf 'after' -> ${perf_after}"; exit 0; }
+rows=0; rows_dcgm=0; dcgm_ok=unknown
+finish() {
+  snapshot_perf "${perf_after}"
+  log "Telemetry stopped (${label}); perf 'after' -> ${perf_after}; DCGM data in ${rows_dcgm}/${rows} rows"
+  (( rows > 0 && rows_dcgm < rows )) && log "WARN: ${label}: $(( rows - rows_dcgm ))/${rows} rows have NO DCGM data (empty columns in ${csv})."
+  exit 0
+}
 trap finish TERM INT
 
 snapshot_perf "${perf_before}"
@@ -62,6 +68,18 @@ while :; do
   power="$(dcgm_val DCGM_FI_DEV_POWER_USAGE)"
   temp="$(dcgm_val DCGM_FI_DEV_GPU_TEMP)"
   dcgm_util="$(dcgm_val DCGM_FI_DEV_GPU_UTIL)"
+
+  # Say so (once per transition) when DCGM goes missing: otherwise the CSV just
+  # fills with empty columns and nobody notices until the charts are blank.
+  rows=$(( rows + 1 ))
+  if [[ -n "${dram}" ]]; then
+    rows_dcgm=$(( rows_dcgm + 1 ))
+    [[ "${dcgm_ok}" == "no" ]] && log "DCGM data is back (${label})."
+    dcgm_ok=yes
+  elif [[ "${dcgm_ok}" != "no" ]]; then
+    log "WARN: no DCGM_FI_PROF_DRAM_ACTIVE from ${DCGM_ENDPOINT} (${label}). Is dcgm-exporter up? docker logs \$(docker ps -qaf name=dcgm)"
+    dcgm_ok=no
+  fi
 
   smi="$(nvidia-smi --query-gpu=utilization.gpu,clocks.sm --format=csv,noheader,nounits -i 0 2>/dev/null || echo ',')"
   smi_util="$(echo "${smi}" | awk -F',' '{gsub(/ /,"",$1); print $1}')"

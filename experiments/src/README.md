@@ -140,6 +140,11 @@ dataset, 1024 in / 256 out, fixed seed, `prompts = max(50, 4×concurrency)`),
 takes `/metrics` snapshots before and after, records 1 Hz GPU telemetry, and
 writes one JSON per level to `<run>/raw/`.
 
+The sweep **refuses to start** if dcgm-exporter isn't serving `DCGM_FI_PROF_*`
+metrics, because the telemetry would come out empty. Start the monitoring stack
+first (step 3), or set `REQUIRE_DCGM=0` to sweep anyway. During the sweep, `06`
+logs a `WARN` when DCGM data goes missing, and the row coverage when each level ends.
+
 To re-run only some levels into the same run: `CONCURRENCIES="1024 2048" bash experiments/src/scripts/03_bench_sweep.sh`.
 
 ### 5. (Optional) Bedrock sweep

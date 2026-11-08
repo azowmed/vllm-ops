@@ -39,6 +39,16 @@ else
 fi
 
 have docker || die "docker not found."
+
+# Without DCGM the telemetry CSVs come out empty and the run has to be redone
+# (happened on 2026-10-20: dcgm-exporter was crash-looping). Check before sweeping.
+if ${is_vllm} && [[ "${REQUIRE_DCGM}" == "1" ]]; then
+  curl -fsS --max-time 5 "${DCGM_ENDPOINT}" 2>/dev/null | grep -q '^DCGM_FI_PROF_DRAM_ACTIVE{' \
+    || die "No DCGM_FI_PROF_* metrics at ${DCGM_ENDPOINT}. Start the monitoring stack
+       (cd experiments/src/monitoring && docker compose --profile gpu up -d), check
+       'docker logs \$(docker ps -qaf name=dcgm)', or set REQUIRE_DCGM=0 to sweep anyway."
+  log "DCGM OK: profiling metrics present at ${DCGM_ENDPOINT}"
+fi
 ${is_vllm} && "${SCRIPTS_DIR}/05_collect_env.sh" || true
 
 # --- client metadata + network latency to the target --------------------
