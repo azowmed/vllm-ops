@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>vLLM Sizing Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+html { -webkit-text-size-adjust: 100%; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+[hidden] { display: none !important; }
+
+/* Layout: a datasheet. Spec inputs in a left rail, readouts on the right, every number in mono. */
+:root {
+  --bg: #eef1f4; --panel: #fbfcfd; --panel-2: #f2f5f8; --ink: #11151b; --ink-2: #465161; --ink-3: #66717f;
+  --line: #d3d9e1; --line-2: #e3e7ed;
+  --accent: #a24e0e; --accent-soft: #f4e4d5; --accent-ink: #ffffff;
+  --s-w: #2a78d6; --s-kv: #1baf7a; --s-rt: #8f99a6; --s-cg: #eda100; --s-free: #e0e5eb; --s-over: #d03b3b;
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b;
+  --good-bg: #e2f3e2; --warn-bg: #fcf0d2; --crit-bg: #f8e0e0; --info-bg: #e3edf9;
+  --f-disp: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1115; --panel: #151a20; --panel-2: #1a2028; --ink: #e7ebf0; --ink-2: #a9b3c0; --ink-3: #8691a0;
+    --line: #2c343f; --line-2: #222932;
+    --accent: #e3914e; --accent-soft: #3a2716; --accent-ink: #1a0f05;
+    --s-w: #3987e5; --s-kv: #199e70; --s-rt: #5f6a78; --s-cg: #c98500; --s-free: #232a33; --s-over: #e66767;
+    --good-bg: #14301a; --warn-bg: #3a2e10; --crit-bg: #3d1818; --info-bg: #172638;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1115; --panel: #151a20; --panel-2: #1a2028; --ink: #e7ebf0; --ink-2: #a9b3c0; --ink-3: #8691a0;
+  --line: #2c343f; --line-2: #222932;
+  --accent: #e3914e; --accent-soft: #3a2716; --accent-ink: #1a0f05;
+  --s-w: #3987e5; --s-kv: #199e70; --s-rt: #5f6a78; --s-cg: #c98500; --s-free: #232a33; --s-over: #e66767;
+  --good-bg: #14301a; --warn-bg: #3a2e10; --crit-bg: #3d1818; --info-bg: #172638;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
+.page { max-width: 1320px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.mono, input, select, td, .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 32px; padding-bottom: 20px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+.eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+h1 { font-family: var(--f-disp); font-stretch: 118%; font-weight: 750; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.05; margin: 6px 0 8px; letter-spacing: -.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); max-width: 64ch; }
+.legendkey { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-3); }
+
+/* Two-column layout */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+@media (min-width: 1000px) {
+  .layout { grid-template-columns: 350px minmax(0, 1fr); align-items: start; }
+  .inputs { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 4px; }
+}
+.inputs { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.results { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+
+/* Input cards */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.card h2 { font-family: var(--f-disp); font-stretch: 112%; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; margin: 0; color: var(--ink-2); font-weight: 700; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card h2 small { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--ink-3); font-weight: 400; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > span { font-size: 12px; color: var(--ink-2); }
+.field > span code { font-size: 11px; color: var(--ink-3); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+input[type="number"], input[type="text"], select {
+  width: 100%; min-width: 0; font-size: 13px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 8px; outline: none; }
+select { font-family: var(--f-body); font-size: 14px; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input::placeholder { color: var(--ink-3); }
+.hint { margin: 0; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+details.sub { border-top: 1px dashed var(--line); padding-top: 8px; }
+details.sub > summary { cursor: pointer; font-size: 12px; color: var(--ink-2); list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+details.sub > summary::-webkit-details-marker { display: none; }
+details.sub > summary::before { content: "▸"; color: var(--ink-3); margin-right: 6px; }
+details.sub[open] > summary::before { content: "▾"; }
+details.sub > summary .sumval { font-family: var(--f-mono); color: var(--ink-3); font-size: 11px; text-align: right; }
+.subbody { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { text-align: center; font-size: 12px; padding: 6px 4px; cursor: pointer; color: var(--ink-2); background: var(--panel-2); }
+.seg label + input + label, .seg input + label ~ label { border-left: 1px solid var(--line); }
+.seg input:checked + label { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Verdict */
+.verdict { display: flex; flex-direction: column; gap: 10px; }
+.vline { display: flex; gap: 12px; align-items: flex-start; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px 3px 8px; border-radius: 999px; white-space: nowrap; color: var(--ink); }
+.pill i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.pill.ok { background: var(--good-bg); } .pill.ok i { background: var(--good); }
+.pill.tight { background: var(--warn-bg); } .pill.tight i { background: var(--warn); }
+.pill.nostart, .pill.nofit { background: var(--crit-bg); } .pill.nostart i, .pill.nofit i { background: var(--crit); }
+.headline { font-family: var(--f-disp); font-stretch: 106%; font-size: clamp(17px, 2vw, 21px); line-height: 1.3; font-weight: 600; margin: 0; text-wrap: balance; }
+.notes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.notes li { font-size: 13px; padding: 8px 10px; border-radius: 6px; display: flex; gap: 8px; color: var(--ink); }
+.notes li b { font-weight: 600; white-space: nowrap; }
+.notes li.warn { background: var(--warn-bg); } .notes li.crit { background: var(--crit-bg); } .notes li.info { background: var(--info-bg); }
+
+/* Sections */
+.sec { display: flex; flex-direction: column; gap: 12px; }
+.sec > h2 { font-family: var(--f-disp); font-stretch: 112%; font-size: 15px; font-weight: 700; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
+.sec > h2 small { font-family: var(--f-body); font-weight: 400; font-stretch: 100%; font-size: 12px; color: var(--ink-3); }
+
+/* VRAM bar */
+.vram { position: relative; padding-top: 22px; }
+.vbar { display: flex; gap: 2px; height: 30px; border-radius: 6px; overflow: hidden; background: var(--s-free); }
+.vbar > div { height: 100%; min-width: 0; }
+.vbar .w { background: var(--s-w); } .vbar .rt { background: var(--s-rt); } .vbar .kv { background: var(--s-kv); }
+.vbar .cg { background: repeating-linear-gradient(135deg, var(--s-cg) 0 5px, transparent 5px 8px), var(--s-free); }
+.vbar .over { background: var(--s-over); }
+.budget { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--ink-2); }
+.budget span { position: absolute; top: 0; transform: translateX(-100%); padding-right: 6px; font-size: 11px; color: var(--ink-2); white-space: nowrap; font-family: var(--f-mono); }
+.vleg { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 16px; margin-top: 12px; }
+.vleg div { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 2px 8px; align-items: baseline; }
+.vleg .sw { width: 12px; height: 12px; border-radius: 3px; align-self: center; }
+.vleg .lbl { font-size: 12px; color: var(--ink-2); }
+.vleg .val { grid-column: 2; font-family: var(--f-mono); font-size: 13px; color: var(--ink); }
+
+/* Figures */
+.figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+@media (max-width: 760px) { .figs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 440px) { .figs { grid-template-columns: minmax(0, 1fr); } }
+.fig { background: var(--panel); padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fig .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.fig .v { font-family: var(--f-mono); font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; overflow-wrap: anywhere; }
+.fig .v small { font-size: 13px; font-weight: 400; color: var(--ink-2); letter-spacing: 0; }
+.fig .s { font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+
+/* Chart */
+.chartwrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 8px 4px; }
+.chartwrap svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.chartwrap .t-axis { fill: var(--ink-3); font-family: var(--f-mono); font-size: 11px; }
+.chartwrap .t-lab { fill: var(--ink-2); font-family: var(--f-body); font-size: 11px; }
+.chartwrap .grid { stroke: var(--line-2); stroke-width: 1; }
+.chartwrap .base { stroke: var(--line); stroke-width: 1; }
+.chartwrap .ln { fill: none; stroke: var(--s-w); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chartwrap .area { fill: var(--s-w); opacity: .10; }
+.chartwrap .dot { fill: var(--s-w); stroke: var(--panel); stroke-width: 2; }
+.chartwrap .kvrule { stroke: var(--s-kv); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.chartwrap .t-kv { fill: var(--ink-2); font-family: var(--f-mono); font-size: 11px; }
+.chartwrap .xh { stroke: var(--ink-3); stroke-width: 1; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; color: var(--ink); }
+.tip b { font-family: var(--f-mono); font-weight: 600; }
+
+/* Table */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { font-family: var(--f-body); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--panel-2); }
+th:first-child, td:first-child { text-align: left; }
+td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.note { text-align: left; font-family: var(--f-body); color: var(--ink-2); font-size: 12px; white-space: normal; min-width: 190px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-body); font-size: 12px; color: var(--ink); }
+.chip i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.c-weights i { background: var(--s-w); } .c-kv i { background: var(--s-kv); } .c-compute i, .c-attn i { background: var(--accent); } .c-comm i { background: var(--s-cg); }
+.muted { color: var(--ink-3); }
+
+/* Arithmetic */
+.math { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+.math > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 4px 16px; padding: 10px 14px; border-bottom: 1px solid var(--line-2); }
+.math > div:last-child { border-bottom: 0; }
+.math dt { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.math dd { margin: 0; font-family: var(--f-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.math dd .eq { color: var(--ink); }
+.math dd .why { display: block; font-family: var(--f-body); font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+@media (max-width: 600px) { .math > div { grid-template-columns: minmax(0, 1fr); } }
+
+/* Check box */
+.checkrun { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.checkrun .hd { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; }
+.checkrun h3 { margin: 0; font-family: var(--f-disp); font-stretch: 108%; font-size: 14px; font-weight: 700; }
+.checkrun p { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 75ch; }
+button.btn { font-family: var(--f-body); font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; }
+button.btn:hover { background: var(--accent-soft); }
+.foot { font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 6px; max-width: 90ch; }
+.foot p { margin: 0; }
+@media (prefers-reduced-motion: no-preference) { .vbar > div { transition: flex-basis .25s ease; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Model × GPU · vLLM V1 · roofline per kernel</div>
+      <h1>vLLM Sizing Calculator</h1>
+      <p class="lede">Pick a model, a weight format and a GPU. You get the VRAM split as vLLM computes it at startup, the KV-cache capacity, and the speed to expect at each concurrency level.</p>
+    </div>
+    <div class="legendkey"><span>GiB = 2³⁰ bytes, as in vLLM logs</span><span>TFLOPS are dense</span><span>≈ approximate spec</span></div>
+  </header>
+
+  <div class="layout">
+    <aside class="inputs" aria-label="Inputs">
+      <section class="card" aria-labelledby="h-model">
+        <h2 id="h-model">Model <small id="model-params"></small></h2>
+        <label class="field"><span>Preset</span><select id="model"></select></label>
+        <div class="grid2">
+          <label class="field"><span>Weights</span><select id="wfmt"></select></label>
+          <label class="field"><span>KV cache <code>--kv-cache-dtype</code></span>
+            <select id="kvfmt"><option value="auto">auto (BF16)</option><option value="fp8">fp8</option></select></label>
+        </div>
+        <p class="hint" id="wfmt-hint"></p>
+        <details class="sub" id="arch-d">
+          <summary><span>Architecture (config.json)</span><span class="sumval" id="arch-sum"></span></summary>
+          <div class="subbody">
+            <div class="seg" role="radiogroup" aria-label="How to define the model">
+              <input type="radio" name="mode" id="mode-arch" value="arch" checked><label for="mode-arch">From config</label>
+              <input type="radio" name="mode" id="mode-count" value="count"><label for="mode-count">From param count</label>
+            </div>
+            <div class="grid2" id="count-fields" hidden>
+              <label class="field"><span>Total params (B)</span><input type="number" id="f-totalB" min="0.01" step="0.1"></label>
+              <label class="field"><span>Active params (B)</span><input type="number" id="f-activeB" min="0" step="0.1" placeholder="= total"></label>
+            </div>
+            <div class="grid3">
+              <label class="field"><span>Layers</span><input type="number" id="f-L" min="1" step="1"></label>
+              <label class="field"><span>Hidden</span><input type="number" id="f-h" min="64" step="64"></label>
+              <label class="field" id="w-inter"><span>MLP inter.</span><input type="number" id="f-inter" min="0" step="64"></label>
+              <label class="field"><span>Q heads</span><input type="number" id="f-qh" min="1" step="1"></label>
+              <label class="field"><span>KV heads</span><input type="number" id="f-kvh" min="1" step="1"></label>
+              <label class="field"><span>Head dim</span><input type="number" id="f-hd" min="16" step="16"></label>
+              <label class="field"><span>Experts</span><input type="number" id="f-E" min="0" step="1"></label>
+              <label class="field"><span>Active exp.</span><input type="number" id="f-k" min="0" step="1"></label>
+              <label class="field" id="w-moeInter"><span>Expert inter.</span><input type="number" id="f-moeInter" min="0" step="64"></label>
+              <label class="field"><span>Vocab</span><input type="number" id="f-vocab" min="1" step="1"></label>
+            </div>
+            <label class="check"><input type="checkbox" id="f-tied"> Tied embeddings (lm_head = embedding matrix)</label>
+            <p class="hint" id="arch-hint">Experts = 0 means dense. In param-count mode, give the totals from the model card (embeddings included); the layer shape is still needed for KV size and attention FLOPs.</p>
+          </div>
+        </details>
+      </section>
+
+      <section class="card" aria-labelledby="h-gpu">
+        <h2 id="h-gpu">GPU <small id="gpu-sub"></small></h2>
+        <label class="field"><span>Preset</span><select id="gpu"></select></label>
+        <div class="grid2">
+          <label class="field"><span>GPUs, tensor parallel <code>-tp</code></span>
+            <select id="tp"><option>1</option><option>2</option><option>4</option><option>8</option></select></label>
+          <label class="field"><span>Interconnect</span>
+            <select id="link"><option value="nvlink">NVLink</option><option value="pcie">PCIe</option></select></label>
+        </div>
+        <details class="sub" id="gpu-d">
+          <summary><span>Specs (edit to model any GPU)</span><span class="sumval" id="gpu-sum"></span></summary>
+          <div class="subbody">
+            <div class="grid2">
+              <label class="field"><span>Memory as CUDA sees it (GiB)</span><input type="number" id="g-gib" min="1" step="0.01"></label>
+              <label class="field"><span>Bandwidth (TB/s)</span><input type="number" id="g-bw" min="0.01" step="0.01"></label>
+              <label class="field"><span>BF16 TFLOPS</span><input type="number" id="g-bf16" min="1" step="1"></label>
+              <label class="field"><span>FP8 TFLOPS (0 = none)</span><input type="number" id="g-fp8" min="0" step="1"></label>
+              <label class="field"><span>FP4 TFLOPS (0 = none)</span><input type="number" id="g-fp4" min="0" step="1"></label>
+              <label class="field"><span>Price per GPU (€/h)</span><input type="number" id="g-price" min="0" step="0.01" placeholder="unknown"></label>
+            </div>
+            <p class="hint">Exact memory: the second number in vLLM's “Free memory on device (x/<b>y</b> GiB)” log line. Prices: Scaleway list prices where filled in.</p>
+          </div>
+        </details>
+      </section>
+
+      <section class="card" aria-labelledby="h-load">
+        <h2 id="h-load">Workload &amp; vLLM flags</h2>
+        <div class="grid3">
+          <label class="field"><span>Input tok</span><input type="number" id="inTok" min="1" step="1"></label>
+          <label class="field"><span>Output tok</span><input type="number" id="outTok" min="1" step="1"></label>
+          <label class="field"><span><code>max-model-len</code></span><input type="number" id="maxLen" min="16" step="1"></label>
+        </div>
+        <label class="field"><span>Concurrency levels to tabulate</span><input type="text" id="conc" inputmode="numeric"></label>
+        <div class="grid3">
+          <label class="field"><span><code>gpu-mem-util</code></span><input type="number" id="util" min="0.1" max="0.99" step="0.01"></label>
+          <label class="field"><span><code>max-num-seqs</code></span><input type="number" id="maxSeqs" min="1" step="1"></label>
+          <label class="field"><span><code>max-batched-tok</code></span><input type="number" id="maxBT" min="16" step="16"></label>
+        </div>
+        <p class="hint" id="flag-hint"></p>
+        <label class="field"><span>Request pattern</span>
+          <select id="pattern">
+            <option value="smooth">Smooth arrivals (production traffic)</option>
+            <option value="cohort">Cohorts (closed-loop benchmark at fixed concurrency)</option>
+          </select></label>
+        <div class="seg" role="radiogroup" aria-label="Hardware efficiency">
+          <input type="radio" name="eff" id="eff-ach" value="ach" checked><label for="eff-ach">Achievable</label>
+          <input type="radio" name="eff" id="eff-peak" value="peak"><label for="eff-peak">Peak specs</label>
+        </div>
+        <details class="sub" id="ass-d">
+          <summary><span>Assumptions</span><span class="sumval" id="ass-sum"></span></summary>
+          <div class="subbody">
+            <div class="grid2">
+              <label class="field"><span>Bandwidth reached (%)</span><input type="number" id="a-effB" min="10" max="100" step="1"></label>
+              <label class="field"><span>Compute reached (%)</span><input type="number" id="a-effC" min="5" max="100" step="1"></label>
+              <label class="field"><span>Non-torch memory (GiB)</span><input type="number" id="a-nonTorch" min="0" step="0.1"></label>
+              <label class="field"><span>Activation peak (GiB)</span><input type="number" id="a-act" min="0" step="0.01" placeholder="auto"></label>
+              <label class="field"><span>CUDA graphs (GiB)</span><input type="number" id="a-graphs" min="0" step="0.1"></label>
+              <label class="field"><span>All-reduce latency (µs)</span><input type="number" id="a-lat" min="0" step="1"></label>
+              <label class="field"><span>All-reduce bus BW (GB/s)</span><input type="number" id="a-linkBW" min="1" step="1"></label>
+              <label class="field"><span>€ per $</span><input type="number" id="a-fx" min="0.01" step="0.01"></label>
+              <label class="field"><span>API $ / M input</span><input type="number" id="a-apiIn" min="0" step="0.01"></label>
+              <label class="field"><span>API $ / M output</span><input type="number" id="a-apiOut" min="0" step="0.01"></label>
+            </div>
+            <p class="hint">Defaults come from the H100 run: DRAM ~80 % active at batch 1, 0.94 GiB non-torch, 1.57 GiB activation peak, 2.12 GiB of CUDA graphs. The activation formula is fitted to that one run. The all-reduce defaults are rough; measure yours with nccl-tests. API prices default to Bedrock Qwen3 32B; set today's exchange rate.</p>
+            <button type="button" class="btn" id="reset">Reset everything to defaults</button>
+          </div>
+        </details>
+      </section>
+    </aside>
+
+    <main class="results">
+      <section class="verdict" aria-live="polite">
+        <div class="vline"><span class="pill" id="pill"><i></i><span></span></span></div>
+        <p class="headline" id="headline"></p>
+        <ul class="notes" id="notes"></ul>
+      </section>
+
+      <section class="sec">
+        <h2>VRAM per GPU <small id="vram-sub"></small></h2>
+        <div class="vram">
+          <div class="vbar" id="vbar" role="img"></div>
+          <div class="budget" id="budget"><span></span></div>
+        </div>
+        <div class="vleg" id="vleg"></div>
+      </section>
+
+      <section class="figs" id="figs" aria-label="Key figures"></section>
+
+      <section class="sec">
+        <h2>Output throughput vs concurrency <small id="chart-sub"></small></h2>
+        <div class="chartwrap" id="chartwrap">
+          <svg id="chart" viewBox="0 0 680 240" aria-label="Output tokens per second by concurrency"></svg>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+        <div class="tablewrap">
+          <table id="tbl">
+            <thead><tr>
+              <th>Concurrency</th><th>In flight</th><th>Step</th><th>Limited by</th><th>Output tok/s</th><th>Per user tok/s</th><th>TTFT ≈</th><th>€ / M out</th><th>Note</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="hint" id="tbl-hint"></p>
+      </section>
+
+      <section class="sec">
+        <h2>The arithmetic <small>same formulas, your numbers</small></h2>
+        <dl class="math" id="math"></dl>
+      </section>
+
+      <section class="checkrun" id="checkrun">
+        <div class="hd">
+          <h3>Checked against your H100 run</h3>
+          <button type="button" class="btn" id="loadref">Load this setup</button>
+        </div>
+        <p>Qwen3-32B-FP8 · vLLM 0.27.0 · 1× H100 PCIe (Scaleway) · util 0.90 · max-model-len 8,192 · 1,024 in / 256 out. Calculator at achievable efficiency.</p>
+        <div class="tablewrap">
+          <table id="reftbl"><thead><tr><th>Quantity</th><th>Calculator</th><th>Log / measured</th></tr></thead><tbody></tbody></table>
+        </div>
+        <p id="refgap"></p>
+      </section>
+
+      <footer class="foot">
+        <p><b>Model.</b> Each engine step runs two kernel classes one after the other. Dense GEMMs take max(FLOPs ÷ compute, weight bytes ÷ bandwidth). Attention takes max(FLOPs ÷ compute, KV bytes ÷ bandwidth). The step adds the two classes and, with tensor parallelism, two all-reduces per layer. MoE layers read only the experts their tokens hit, assuming uniform routing.</p>
+        <p><b>Not modeled:</b> scheduler and CPU overhead, sampling, preemption recompute, prefix-cache hits, speculative decoding, power and clock throttling, pipeline parallelism. Expect measurements below these numbers, not above.</p>
+        <p><b>Specs:</b> NVIDIA datasheets, dense tensor TFLOPS. RTX PRO 6000, B300 and Rubin are approximate or announced.</p>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<script>
+// ---- Calculation engine (no DOM). Units: bytes, FLOPs, seconds. ----
+const GiB = 1073741824;
+
+// Weight formats. Only the transformer-block linear layers are quantized;
+// embeddings, lm_head and norms stay 16-bit (true for Qwen FP8, AWQ, GPTQ, ModelOpt checkpoints).
+const FMT = {
+  bf16:  { label: 'BF16', bpp: 2, math: 'bf16', hint: 'Unquantized checkpoint.' },
+  fp8:   { label: 'FP8 · W8A8', bpp: 1 + 4 / 16384, math: 'fp8', hint: '1 byte per weight + one FP32 scale per 128×128 block (e.g. Qwen/Qwen3-32B-FP8).' },
+  int4:  { label: 'INT4 · AWQ / GPTQ', bpp: 0.5 + 2.5 / 128, math: 'bf16', hint: 'W4A16: 4-bit weights, FP16 scale + 4-bit zero per group of 128. Math runs in BF16 (Marlin kernels).' },
+  nvfp4: { label: 'NVFP4 · W4A4', bpp: 0.5 + 1 / 16, math: 'fp4', hint: '4-bit values + one FP8 scale per 16. FP4 math needs Blackwell.' },
+  mxfp4: { label: 'MXFP4', bpp: 0.5 + 1 / 32, math: 'fp4', hint: '4-bit values + one E8M0 scale per 32. FP4 math needs Blackwell.' },
+};
+
+// Architectures copied from each model's config.json on Hugging Face.
+const MODELS = [
+  { id: 'qwen3-0.6b', group: 'Qwen3 · dense', name: 'Qwen3-0.6B', L: 28, h: 1024, qh: 16, kvh: 8, hd: 128, inter: 3072, vocab: 151936, tied: true },
+  { id: 'qwen3-1.7b', group: 'Qwen3 · dense', name: 'Qwen3-1.7B', L: 28, h: 2048, qh: 16, kvh: 8, hd: 128, inter: 6144, vocab: 151936, tied: true },
+  { id: 'qwen3-4b', group: 'Qwen3 · dense', name: 'Qwen3-4B', L: 36, h: 2560, qh: 32, kvh: 8, hd: 128, inter: 9728, vocab: 151936, tied: true },
+  { id: 'qwen3-8b', group: 'Qwen3 · dense', name: 'Qwen3-8B', L: 36, h: 4096, qh: 32, kvh: 8, hd: 128, inter: 12288, vocab: 151936, tied: false },
+  { id: 'qwen3-14b', group: 'Qwen3 · dense', name: 'Qwen3-14B', L: 40, h: 5120, qh: 40, kvh: 8, hd: 128, inter: 17408, vocab: 151936, tied: false },
+  { id: 'qwen3-32b', group: 'Qwen3 · dense', name: 'Qwen3-32B', L: 64, h: 5120, qh: 64, kvh: 8, hd: 128, inter: 25600, vocab: 151936, tied: false },
+  { id: 'qwen3-30b-a3b', group: 'Qwen3 · MoE', name: 'Qwen3-30B-A3B', L: 48, h: 2048, qh: 32, kvh: 4, hd: 128, E: 128, k: 8, moeInter: 768, vocab: 151936, tied: false },
+  { id: 'qwen3-235b-a22b', group: 'Qwen3 · MoE', name: 'Qwen3-235B-A22B', L: 94, h: 4096, qh: 64, kvh: 4, hd: 128, E: 128, k: 8, moeInter: 1536, vocab: 151936, tied: false },
+  { id: 'qwen2.5-72b', group: 'Other dense', name: 'Qwen2.5-72B', L: 80, h: 8192, qh: 64, kvh: 8, hd: 128, inter: 29568, vocab: 152064, tied: false },
+  { id: 'mistral-small-24b', group: 'Other dense', name: 'Mistral Small 24B (text)', L: 40, h: 5120, qh: 32, kvh: 8, hd: 128, inter: 32768, vocab: 131072, tied: false },
+  { id: 'llama3.1-8b', group: 'Other dense', name: 'Llama 3.1 8B', L: 32, h: 4096, qh: 32, kvh: 8, hd: 128, inter: 14336, vocab: 128256, tied: false },
+  { id: 'llama3.3-70b', group: 'Other dense', name: 'Llama 3.3 70B', L: 80, h: 8192, qh: 64, kvh: 8, hd: 128, inter: 28672, vocab: 128256, tied: false },
+  { id: 'llama3.1-405b', group: 'Other dense', name: 'Llama 3.1 405B', L: 126, h: 16384, qh: 128, kvh: 8, hd: 128, inter: 53248, vocab: 128256, tied: false },
+];
+
+// gib = total memory as CUDA reports it (the "y" in vLLM's "Free memory on device (x/y GiB)").
+// TFLOPS are dense (no 2:4 sparsity). 0 = no tensor-core support for that format.
+const GPUS = [
+  { id: 'l4', name: 'L4', arch: 'Ada', cc: '8.9', memLabel: '24 GB GDDR6', gib: 22.0, bw: 0.30, bf16: 121, fp8: 242, fp4: 0, price: 0.79, link: 'pcie' },
+  { id: 'a10', name: 'A10', arch: 'Ampere', cc: '8.6', memLabel: '24 GB GDDR6', gib: 22.0, bw: 0.60, bf16: 125, fp8: 0, fp4: 0, price: 0, link: 'pcie' },
+  { id: 'l40s', name: 'L40S', arch: 'Ada', cc: '8.9', memLabel: '48 GB GDDR6', gib: 44.4, bw: 0.864, bf16: 362, fp8: 733, fp4: 0, price: 1.47, link: 'pcie' },
+  { id: 'a100-40', name: 'A100 40GB', arch: 'Ampere', cc: '8.0', memLabel: '40 GB HBM2', gib: 39.4, bw: 1.555, bf16: 312, fp8: 0, fp4: 0, price: 0, link: 'nvlink' },
+  { id: 'a100-80', name: 'A100 80GB SXM', arch: 'Ampere', cc: '8.0', memLabel: '80 GB HBM2e', gib: 79.2, bw: 2.039, bf16: 312, fp8: 0, fp4: 0, price: 0, link: 'nvlink' },
+  { id: 'h100-pcie', name: 'H100 PCIe', arch: 'Hopper', cc: '9.0', memLabel: '80 GB HBM2e', gib: 79.18, bw: 2.0, bf16: 756, fp8: 1513, fp4: 0, price: 2.73, link: 'pcie', measured: true },
+  { id: 'h100-sxm', name: 'H100 SXM', arch: 'Hopper', cc: '9.0', memLabel: '80 GB HBM3', gib: 79.2, bw: 3.35, bf16: 989, fp8: 1979, fp4: 0, price: 0, link: 'nvlink' },
+  { id: 'h200', name: 'H200', arch: 'Hopper', cc: '9.0', memLabel: '141 GB HBM3e', gib: 139.8, bw: 4.8, bf16: 989, fp8: 1979, fp4: 0, price: 0, link: 'nvlink' },
+  { id: 'rtx6000', name: 'RTX PRO 6000 Blackwell', arch: 'Blackwell', cc: '12.0', memLabel: '96 GB GDDR7', gib: 94.9, bw: 1.792, bf16: 500, fp8: 1000, fp4: 2000, price: 0, link: 'pcie', approx: true },
+  { id: 'b200', name: 'B200', arch: 'Blackwell', cc: '10.0', memLabel: '180 GB HBM3e', gib: 178.4, bw: 8.0, bf16: 2250, fp8: 4500, fp4: 9000, price: 0, link: 'nvlink' },
+  { id: 'b300', name: 'B300', arch: 'Blackwell Ultra', cc: '10.3', memLabel: '288 GB HBM3e', gib: 268, bw: 8.0, bf16: 2250, fp8: 4500, fp4: 13500, price: 0, link: 'nvlink', approx: true },
+  { id: 'rubin', name: 'Rubin (announced)', arch: 'Rubin', cc: '—', memLabel: '288 GB HBM4', gib: 268, bw: 22, bf16: 8750, fp8: 17500, fp4: 50000, price: 0, link: 'nvlink', approx: true },
+];
+
+// Parameter counts from the architecture, or from a given total (count mode).
+function deriveModel(s) {
+  const { L, h, qh, kvh, hd, vocab } = s;
+  const attn = h * qh * hd + 2 * h * kvh * hd + qh * hd * h;         // q, k, v, o projections
+  const norms = L * (2 * h + 2 * hd) + h;                              // RMSNorms (+ Qwen3 q/k norms), final norm
+  const embed = vocab * h;
+  const head = s.tied ? 0 : vocab * h;
+  const warn = [];
+  let dense, expert = 0, E = 0, k = 0;
+  if (s.mode === 'count') {
+    const total = s.totalB * 1e9;
+    const active = (s.activeB > 0 ? s.activeB : s.totalB) * 1e9;
+    const linT = total - embed - head - norms;
+    const linA = active - embed - head - norms;
+    if (s.E > 0 && s.k > 0 && s.E > s.k && total > active) {
+      E = s.E; k = s.k;
+      expert = (linT - linA) / (L * (E - k));
+      dense = linA / L - k * expert;
+    } else {
+      dense = linT / L;
+    }
+    if (linT <= 0 || dense < attn * 0.5) warn.push('The parameter count is too small for this layer shape: check layers, hidden size and vocab.');
+  } else if (s.E > 0 && s.k > 0) {
+    E = s.E; k = s.k;
+    expert = 3 * h * s.moeInter;                                       // gate, up, down of one expert
+    dense = attn + h * E;                                              // attention + router
+  } else {
+    dense = attn + 3 * h * s.inter;                                    // attention + SwiGLU MLP
+  }
+  const linTotal = L * (dense + E * expert);
+  const linActive = L * (dense + k * expert);
+  const iEff = Math.max(0, (dense - attn - (E > 0 && s.mode !== 'count' ? h * E : 0)) / (3 * h)) + (k * expert) / (3 * h);
+  return { ...s, attn, norms, embed, head, dense, expert, E, k, linTotal, linActive, iEff,
+    total: linTotal + embed + head + norms, active: linActive + embed + head + norms, warn };
+}
+
+// W: workload {wfmt, kvfmt, tp, inTok, outTok, maxLen, util, maxSeqs, maxBT, pattern}
+// A: assumptions {peak, effB, effC, nonTorch, act, graphs, lat, linkBW}
+function engine(M, G, W, A) {
+  const tp = W.tp;
+  const fmt = FMT[W.wfmt];
+  const bpp = fmt.bpp;
+  const kvBytes = W.kvfmt === 'fp8' ? 1 : 2;
+  const notes = [];
+
+  let tfLin = G.bf16, linMath = 'BF16';
+  if (fmt.math === 'fp8') {
+    if (G.fp8 > 0) { tfLin = G.fp8; linMath = 'FP8'; }
+    else notes.push({ level: 'warn', text: `${G.name} has no FP8 tensor cores (compute capability ${G.cc} < 8.9). vLLM runs FP8 checkpoints weight-only (Marlin): the memory saving stays, the math runs at the BF16 rate.` });
+  }
+  if (fmt.math === 'fp4') {
+    if (G.fp4 > 0) { tfLin = G.fp4; linMath = 'FP4'; }
+    else notes.push({ level: 'warn', text: `${G.name} has no FP4 tensor cores (Blackwell only). Where vLLM supports a weight-only fallback, the math runs at the BF16 rate; check support for your checkpoint.` });
+  }
+  if (fmt.math === 'bf16' && W.wfmt === 'int4') linMath = 'BF16 (W4A16)';
+  const tfAttn = G.bf16;
+  const effB = A.peak ? 1 : A.effB;
+  const effC = A.peak ? 1 : A.effC;
+  const BW = G.bw * 1e12 * effB;
+  const TFl = tfLin * 1e12 * effC;
+  const TFa = tfAttn * 1e12 * effC;
+
+  // ---- Memory (per GPU) ----
+  const linBytes = M.linTotal * bpp;
+  const sixteenBytes = (M.embed + M.head + M.norms) * 2;
+  const wBytes = (linBytes + sixteenBytes) / tp;
+  const wGiB = wBytes / GiB;
+  const kvhG = M.kvh >= tp ? M.kvh / tp : 1;
+  const kvTok = 2 * M.L * kvhG * M.hd * kvBytes;                      // bytes per token per GPU
+  const bigGpu = G.gib >= 70 && !/a100/i.test(G.name);
+  const maxSeqs = W.maxSeqs > 0 ? W.maxSeqs : (bigGpu ? 1024 : 256);
+  const maxBT = W.maxBT > 0 ? W.maxBT : (bigGpu ? 8192 : 2048);
+  const actAuto = (maxBT * (3 * M.iEff / tp + 5 * M.h) * 2) / GiB;
+  const act = A.act > 0 ? A.act : actAuto;
+  const budget = W.util * G.gib;
+  const kvGiB = budget - wGiB - A.nonTorch - act;
+  const blocks = kvGiB > 0 ? Math.floor((kvGiB * GiB) / (16 * kvTok)) : 0;
+  const kvTokens = blocks * 16;
+  const footprint = wGiB + A.nonTorch + act + Math.max(kvGiB, 0) + A.graphs;
+  const fullReq = Math.floor(kvTokens / (W.inTok + W.outTok));
+  const ctxAvg = W.inTok + W.outTok / 2;
+
+  let status = 'ok';
+  if (wGiB + A.nonTorch + act >= budget) status = 'nofit';
+  else if (kvTokens < W.maxLen) status = 'nostart';
+  else if (footprint > G.gib) status = 'tight';
+
+  if (tp > 1) {
+    if (M.qh % tp !== 0) notes.push({ level: 'crit', text: `${M.qh} query heads are not divisible by ${tp} GPUs: vLLM refuses this tensor-parallel size.` });
+    else if (M.kvh % tp !== 0 && tp % M.kvh !== 0) notes.push({ level: 'crit', text: `${M.kvh} KV heads and ${tp} GPUs don't divide each other: vLLM refuses this tensor-parallel size.` });
+    else if (M.kvh < tp) notes.push({ level: 'info', text: `Only ${M.kvh} KV heads for ${tp} GPUs: vLLM replicates them, so each GPU stores 1 KV head per layer and KV capacity grows less than linearly.` });
+  }
+
+  // ---- One engine step: per-kernel-class roofline, classes run one after the other ----
+  function step(dec, decCtx, pre, preCtx) {
+    const T = dec + pre;
+    const touched = M.E > 0 ? M.E * (1 - Math.pow(1 - M.k / M.E, Math.max(T, 1))) : 0;
+    const bytesLin = (M.L * (M.dense + touched * M.expert) * bpp + M.vocab * M.h * 2 + M.norms * 2) / tp;
+    const sampled = dec + (pre > 0 ? 1 : 0);
+    const flopsLin = (T * 2 * M.linActive + sampled * 2 * M.vocab * M.h) / tp;
+    const linC = flopsLin / TFl, linM = bytesLin / BW;
+    const attnF = (4 * M.L * M.qh * M.hd * (dec * decCtx + pre * preCtx)) / tp;
+    const attnB = dec * decCtx * kvTok + pre * kvTok;
+    const attC = attnF / TFa, attM = attnB / BW;
+    const comm = tp > 1 ? 2 * M.L * (A.lat * 1e-6 + ((2 * (tp - 1)) / tp) * T * M.h * 2 / (A.linkBW * 1e9)) : 0;
+    const tLin = Math.max(linC, linM), tAtt = Math.max(attC, attM);
+    const total = tLin + tAtt + comm;
+    const parts = [
+      ['weights', linM >= linC ? tLin : 0], ['compute', linC > linM ? tLin : 0],
+      ['kv', attM >= attC ? tAtt : 0], ['attn', attC > attM ? tAtt : 0], ['comm', comm],
+    ];
+    parts.sort((a, b) => b[1] - a[1]);
+    return { total, tLin, tAtt, comm, linC, linM, attC, attM, bytesLin, flopsLin, attnF, attnB, touched, bound: parts[0][0], T };
+  }
+
+  function prefillAlone(n) {
+    let t = 0, s = 0, steps = 0;
+    while (s < n) { const c = Math.min(maxBT, n - s); t += step(0, 0, c, s + c / 2).total; s += c; steps++; }
+    return { t, steps };
+  }
+
+  const prefill = prefillAlone(W.inTok);
+  const ratio = W.inTok / W.outTok;
+
+  function steady(C) {
+    const running = Math.min(C, maxSeqs, fullReq);
+    if (running < 1) return null;
+    let dec = running, pre = running * ratio, capped = false, st, thr, longStep;
+    if (W.pattern === 'cohort') {
+      // Closed-loop benchmark: requests start and finish together.
+      // Phase 1: prefill running × inTok tokens in steps of maxBT. Phase 2: outTok decode-only steps.
+      const preTok = running * W.inTok;
+      const chunks = Math.ceil(preTok / maxBT);
+      const chunk = step(0, 0, preTok / chunks, W.inTok / 2);
+      const dstep = step(running, ctxAvg, 0, 0);
+      const cycle = chunks * chunk.total + W.outTok * dstep.total;
+      thr = (running * W.outTok) / cycle;
+      st = dstep; longStep = chunk.total;
+      st = { ...dstep, cycle, chunkT: chunk.total, chunks };
+    } else {
+      if (dec + pre > maxBT) { const s = maxBT / (dec + pre); dec *= s; pre *= s; capped = true; }
+      st = step(dec, ctxAvg, pre, W.inTok / 2);
+      thr = dec / st.total;
+      longStep = step(running, ctxAvg, Math.max(0, maxBT - running), W.inTok / 2).total;
+    }
+    const perUser = thr / running;
+    const reqRate = thr / W.outTok;                                  // requests finished per second
+    const wait = C > running ? (C - running) / reqRate : 0;
+    const roomPre = Math.max(1, maxBT - running);
+    const firstSteps = Math.ceil(W.inTok / roomPre);
+    const ttft0 = W.pattern === 'cohort' ? st.chunks * st.chunkT : firstSteps * step(running, ctxAvg, Math.min(W.inTok, roomPre), W.inTok / 2).total;
+    const cost = G.price > 0 ? (G.price * tp) / (thr * 3600) * 1e6 : null;
+    let limit = null;
+    if (C > running) limit = running === fullReq ? 'kv' : 'seqs';
+    return { C, running, st, thr, perUser, wait, ttft: ttft0 + wait, cost, limit, capped, longStep };
+  }
+
+  const itl1 = step(1, ctxAvg, 0, 0);
+  const decodeOnlyCeil = fullReq >= 1 ? step(Math.min(fullReq, maxSeqs), ctxAvg, 0, 0) : null;
+  const plateau = steady(Infinity);
+
+  return { tp, fmt, bpp, kvBytes, linMath, tfLin, tfAttn, effB, effC, BW, TFl, TFa,
+    linBytes, sixteenBytes, wBytes, wGiB, kvhG, kvTok, maxSeqs, maxBT, bigGpu, actAuto, act, budget,
+    kvGiB, blocks, kvTokens, footprint, fullReq, ctxAvg, status, notes, step, steady, prefill, itl1,
+    decodeOnlyCeil, plateau };
+}
+
+// Smallest power-of-two GPU count that starts.
+function minGpus(M, G, W, A) {
+  for (const n of [1, 2, 4, 8, 16]) {
+    const r = engine(M, G, { ...W, tp: n }, A);
+    if (r.status === 'ok' || r.status === 'tight') return n;
+  }
+  return null;
+}
+
+if (typeof module !== 'undefined') module.exports = { GiB, FMT, MODELS, GPUS, deriveModel, engine, minGpus };
+
+</script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const LS = 'vllm-calc-v1';
+  const LINK = { nvlink: { lat: 8, bw: 300 }, pcie: { lat: 20, bw: 20 } };
+  const DEFAULTS = {
+    model: 'qwen3-32b', mode: 'arch', wfmt: 'fp8', kvfmt: 'auto', gpu: 'h100-pcie', tp: '1', link: 'pcie',
+    inTok: 1024, outTok: 256, maxLen: 8192, conc: '1, 8, 16, 32, 64, 128, 256, 512', util: 0.9, maxSeqs: '', maxBT: '',
+    pattern: 'smooth', eff: 'ach', effB: 80, effC: 60, nonTorch: 1.0, act: '', graphs: 2.0, lat: 20, linkBW: 20, fx: 0.86, apiIn: 0.15, apiOut: 0.60,
+  };
+  const ARCH = ['L', 'h', 'inter', 'qh', 'kvh', 'hd', 'E', 'k', 'moeInter', 'vocab'];
+  const GSPEC = ['gib', 'bw', 'bf16', 'fp8', 'fp4', 'price'];
+
+  // ---------- formatting ----------
+  const nf = (x, d = 0) => (isFinite(x) ? x.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
+  const sig = (x) => (x >= 100 ? nf(x) : x >= 10 ? nf(x, 1) : nf(x, 2));
+  const rate = (x) => (x >= 1000 ? nf(Math.round(x / 10) * 10) : x >= 100 ? nf(x) : nf(x, 1));
+  const gib = (x) => `${x >= 100 ? nf(x, 1) : nf(x, 2)} GiB`;
+  const gb = (b) => `${sig(b / 1e9)} GB`;
+  function dur(s) {
+    if (!isFinite(s)) return '—';
+    if (s < 1e-3) return `${nf(s * 1e6)} µs`;
+    if (s < 1) return `${s * 1e3 < 10 ? nf(s * 1e3, 2) : s * 1e3 < 100 ? nf(s * 1e3, 1) : nf(s * 1e3)} ms`;
+    if (s < 120) return `${nf(s, 1)} s`;
+    return `${nf(s / 60, 1)} min`;
+  }
+  const flops = (f) => (f >= 1e12 ? `${sig(f / 1e12)} TFLOP` : `${sig(f / 1e9)} GFLOP`);
+  const bytesKiB = (b) => (b >= 1048576 ? `${sig(b / 1048576)} MiB` : `${sig(b / 1024)} KiB`);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const BOUND = { weights: 'Weights read', compute: 'GEMM compute', kv: 'KV read', attn: 'Attention compute', comm: 'All-reduce' };
+
+  // ---------- options ----------
+  function buildSelects() {
+    const groups = {};
+    MODELS.forEach((m) => (groups[m.group] = groups[m.group] || []).push(m));
+    let html = '';
+    for (const g in groups) html += `<optgroup label="${esc(g)}">${groups[g].map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</optgroup>`;
+    html += `<optgroup label="Custom"><option value="custom">Custom architecture</option><option value="count">Custom · from parameter count</option></optgroup>`;
+    $('#model').innerHTML = html;
+    $('#wfmt').innerHTML = Object.entries(FMT).map(([k, f]) => `<option value="${k}">${esc(f.label)}</option>`).join('');
+    $('#gpu').innerHTML = GPUS.map((g) => `<option value="${g.id}">${esc(g.name)}${g.approx ? ' ≈' : ''} · ${esc(g.memLabel)}</option>`).join('') + '<option value="custom">Custom GPU</option>';
+  }
+
+  function applyModelPreset(id) {
+    const m = MODELS.find((x) => x.id === id);
+    if (!m) return;
+    ARCH.forEach((k) => ($('#f-' + k).value = m[k] != null ? m[k] : 0));
+    $('#f-tied').checked = !!m.tied;
+    setMode('arch');
+    const d = deriveModel({ ...m, mode: 'arch', E: m.E || 0, k: m.k || 0, inter: m.inter || 0, moeInter: m.moeInter || 0 });
+    $('#f-totalB').value = +(d.total / 1e9).toFixed(2);
+    $('#f-activeB').value = d.E > 0 ? +(d.active / 1e9).toFixed(2) : '';
+  }
+  function applyGpuPreset(id) {
+    const g = GPUS.find((x) => x.id === id);
+    if (!g) return;
+    GSPEC.forEach((k) => ($('#g-' + k).value = g[k] || (k === 'price' ? '' : 0)));
+    $('#link').value = g.link;
+    applyLink(g.link);
+  }
+  function applyLink(l) { $('#a-lat').value = LINK[l].lat; $('#a-linkBW').value = LINK[l].bw; }
+  function setMode(m) { $('#mode-' + m).checked = true; syncModeUI(); }
+  function syncModeUI() {
+    const count = $('#mode-count').checked;
+    $('#count-fields').hidden = !count;
+    const moe = (+$('#f-E').value || 0) > 0;
+    $('#w-inter').hidden = count || moe;
+    $('#w-moeInter').hidden = count || !moe;
+  }
+
+  // ---------- state ----------
+  const ids = { inTok: '#inTok', outTok: '#outTok', maxLen: '#maxLen', conc: '#conc', util: '#util', maxSeqs: '#maxSeqs', maxBT: '#maxBT', pattern: '#pattern',
+    effB: '#a-effB', effC: '#a-effC', nonTorch: '#a-nonTorch', act: '#a-act', graphs: '#a-graphs', lat: '#a-lat', linkBW: '#a-linkBW', fx: '#a-fx', apiIn: '#a-apiIn', apiOut: '#a-apiOut',
+    wfmt: '#wfmt', kvfmt: '#kvfmt', tp: '#tp', link: '#link' };
+
+  function snapshot() {
+    const s = { model: $('#model').value, gpu: $('#gpu').value, mode: $('#mode-count').checked ? 'count' : 'arch', eff: $('#eff-peak').checked ? 'peak' : 'ach', arch: {}, gspec: {} };
+    for (const k in ids) s[k] = $(ids[k]).value;
+    ARCH.forEach((k) => (s.arch[k] = $('#f-' + k).value));
+    s.arch.tied = $('#f-tied').checked; s.arch.totalB = $('#f-totalB').value; s.arch.activeB = $('#f-activeB').value;
+    GSPEC.forEach((k) => (s.gspec[k] = $('#g-' + k).value));
+    return s;
+  }
+  function restore(s) {
+    $('#model').value = s.model; $('#gpu').value = s.gpu;
+    if (s.arch) { ARCH.forEach((k) => ($('#f-' + k).value = s.arch[k])); $('#f-tied').checked = !!s.arch.tied; $('#f-totalB').value = s.arch.totalB; $('#f-activeB').value = s.arch.activeB; }
+    if (s.gspec) GSPEC.forEach((k) => ($('#g-' + k).value = s.gspec[k]));
+    for (const k in ids) if (s[k] != null) $(ids[k]).value = s[k];
+    $('#mode-' + (s.mode || 'arch')).checked = true;
+    $('#eff-' + (s.eff || 'ach')).checked = true;
+    syncModeUI();
+  }
+  function loadDefaults() {
+    $('#model').value = DEFAULTS.model; applyModelPreset(DEFAULTS.model);
+    $('#gpu').value = DEFAULTS.gpu; applyGpuPreset(DEFAULTS.gpu);
+    for (const k in ids) if (DEFAULTS[k] != null && !['lat', 'linkBW'].includes(k)) $(ids[k]).value = DEFAULTS[k];
+    $('#link').value = DEFAULTS.link; applyLink(DEFAULTS.link);
+    $('#eff-ach').checked = true;
+  }
+  function save() { try { localStorage.setItem(LS, JSON.stringify(snapshot())); } catch (e) {} }
+
+  const num = (sel, d = 0) => { const v = parseFloat($(sel).value); return isFinite(v) ? v : d; };
+  const int = (sel, d = 0) => Math.max(0, Math.round(num(sel, d)));
+
+  function readInputs() {
+    const mode = $('#mode-count').checked ? 'count' : 'arch';
+    const spec = { mode, tied: $('#f-tied').checked, totalB: num('#f-totalB'), activeB: num('#f-activeB') };
+    ARCH.forEach((k) => (spec[k] = int('#f-' + k)));
+    const gsel = $('#gpu').value;
+    const base = GPUS.find((g) => g.id === gsel) || { name: 'Custom GPU', cc: '?', arch: '', memLabel: '' };
+    const G = { ...base, gib: num('#g-gib'), bw: num('#g-bw'), bf16: num('#g-bf16'), fp8: num('#g-fp8'), fp4: num('#g-fp4'), price: num('#g-price') };
+    const W = { wfmt: $('#wfmt').value, kvfmt: $('#kvfmt').value, tp: +$('#tp').value, inTok: Math.max(1, int('#inTok', 1)), outTok: Math.max(1, int('#outTok', 1)),
+      maxLen: Math.max(16, int('#maxLen', 16)), util: Math.min(0.99, Math.max(0.05, num('#util', 0.9))), maxSeqs: int('#maxSeqs'), maxBT: int('#maxBT'), pattern: $('#pattern').value };
+    const A = { peak: $('#eff-peak').checked, effB: Math.min(1, Math.max(0.05, num('#a-effB', 80) / 100)), effC: Math.min(1, Math.max(0.02, num('#a-effC', 60) / 100)),
+      nonTorch: num('#a-nonTorch', 1), act: num('#a-act'), graphs: num('#a-graphs', 2), lat: num('#a-lat', 20), linkBW: Math.max(0.1, num('#a-linkBW', 20)),
+      fx: num('#a-fx', 0.86), apiIn: num('#a-apiIn'), apiOut: num('#a-apiOut') };
+    const conc = [...new Set(($('#conc').value.match(/\d+/g) || ['1']).map(Number).filter((c) => c >= 1 && c <= 100000))].sort((a, b) => a - b).slice(0, 14);
+    const mm = MODELS.find((m) => m.id === $('#model').value);
+    const name = mm ? mm.name : mode === 'count' ? `Custom ${num('#f-totalB')}B` : 'Custom model';
+    return { spec, G, W, A, conc, name };
+  }
+
+  function valid(spec, G) {
+    const miss = [];
+    ['L', 'h', 'qh', 'kvh', 'hd', 'vocab'].forEach((k) => { if (!(spec[k] > 0)) miss.push(k); });
+    if (spec.mode === 'arch' && spec.E > 0 && !(spec.moeInter > 0)) miss.push('expert intermediate');
+    if (spec.mode === 'arch' && !(spec.E > 0) && !(spec.inter > 0)) miss.push('MLP intermediate');
+    if (spec.mode === 'count' && !(spec.totalB > 0)) miss.push('total params');
+    if (!(G.gib > 0) || !(G.bw > 0) || !(G.bf16 > 0)) miss.push('GPU memory, bandwidth or BF16 TFLOPS');
+    return miss;
+  }
+
+  // ---------- render ----------
+  function render() {
+    const { spec, G, W, A, conc, name } = readInputs();
+    syncModeUI();
+    const miss = valid(spec, G);
+    if (miss.length) {
+      setPill('nofit', 'Missing input');
+      $('#headline').textContent = `Fill in: ${miss.join(', ')}.`;
+      $('#notes').innerHTML = '';
+      return;
+    }
+    const M = deriveModel(spec);
+    const r = engine(M, G, W, A);
+    const label = `${name} · ${FMT[W.wfmt].label.split(' ·')[0]}`;
+    const gpuLabel = `${W.tp}× ${G.name}`;
+
+    $('#model-params').textContent = M.E > 0 ? `${sig(M.total / 1e9)}B · ${sig(M.active / 1e9)}B active` : `${sig(M.total / 1e9)}B params`;
+    $('#arch-sum').textContent = `${M.L}L · ${M.qh}q/${M.kvh}kv × ${M.hd}${M.E > 0 ? ` · ${M.E} exp, ${M.k} active` : ''}`;
+    $('#gpu-sub').textContent = G.arch ? `${G.arch} · CC ${G.cc}` : '';
+    $('#gpu-sum').textContent = `${nf(G.gib, 1)} GiB · ${G.bw} TB/s`;
+    $('#ass-sum').textContent = A.peak ? 'peak specs' : `${Math.round(A.effB * 100)}% BW · ${Math.round(A.effC * 100)}% compute`;
+    $('#wfmt-hint').textContent = `${FMT[W.wfmt].hint} ${nf(r.bpp, 4)} bytes per weight. Math: ${r.linMath} at ${nf(r.tfLin)} TFLOPS.`;
+    $('#maxSeqs').placeholder = `${r.bigGpu ? 1024 : 256}`;
+    $('#maxBT').placeholder = `${r.bigGpu ? 8192 : 2048}`;
+    $('#flag-hint').textContent = `Blank flags use vLLM 0.27 defaults for this GPU: max-num-seqs ${r.bigGpu ? 1024 : 256}, max-batched-tok ${r.bigGpu ? 8192 : 2048} (${r.bigGpu ? '≥ 70 GiB and not an A100' : 'below 70 GiB, or an A100'}).`;
+
+    // verdict
+    const statusText = { ok: 'Fits', tight: 'Tight', nostart: "Won't start", nofit: "Doesn't fit" }[r.status];
+    setPill(r.status, statusText);
+    let head = '';
+    const p = r.plateau;
+    if (r.status === 'nofit') {
+      const n = minGpus(M, G, W, A);
+      head = `${label} needs ${gib(r.wGiB)} of weights per GPU. The budget on ${gpuLabel} is ${gib(r.budget)} (${W.util} × ${nf(G.gib, 1)}), before any KV cache. ${n ? `Smallest setup that starts: ${n}× ${G.name}.` : 'Even 16 GPUs are not enough.'}`;
+    } else if (r.status === 'nostart') {
+      const n = minGpus(M, G, W, A);
+      head = `Only ${nf(r.kvTokens)} tokens of KV cache fit, below max-model-len ${nf(W.maxLen)}: vLLM refuses to start. Lower --max-model-len to ${nf(Math.floor(r.kvTokens / 16) * 16)} or less${n && n > W.tp ? `, or use ${n}× ${G.name}` : ''}.`;
+    } else {
+      head = `${label} on ${gpuLabel}: ${nf(r.kvTokens)} tokens of KV cache, ${nf(r.fullReq)} full ${nf(W.inTok + W.outTok)}-token requests in flight, ${p ? `~${rate(p.thr)} output tok/s at saturation` : 'no request fits'}.`;
+    }
+    $('#headline').textContent = head;
+    const notes = [...r.notes, ...M.warn.map((t) => ({ level: 'crit', text: t }))];
+    if (r.status === 'tight') notes.unshift({ level: 'warn', text: `vLLM 0.27 sizes the KV cache before it captures CUDA graphs. With ${gib(A.graphs)} of graphs the real footprint is ${gib(r.footprint)}, above the ${gib(G.gib)} on the card. Capture may run out of memory: lower --gpu-memory-utilization or set --kv-cache-memory.` });
+    if (r.status !== 'nofit' && r.fullReq >= 1 && r.fullReq < 4) notes.push({ level: 'warn', text: `Fewer than 4 requests fit: decode stays weight-read bound and batching barely helps.` });
+    $('#notes').innerHTML = notes.map((n) => `<li class="${n.level}"><b>${n.level === 'crit' ? 'Blocked' : n.level === 'warn' ? 'Check' : 'Note'}</b><span>${esc(n.text)}</span></li>`).join('');
+
+    renderVram(r, G, W, A);
+    renderFigs(M, r, G, W);
+    const rows = conc.map((C) => r.steady(C));
+    renderTable(rows, r, W, G);
+    renderChart(r, conc);
+    renderMath(M, r, G, W, A);
+    renderRef();
+    save();
+  }
+
+  function setPill(cls, text) { const el = $('#pill'); el.className = 'pill ' + cls; el.querySelector('span').textContent = text; }
+
+  function renderVram(r, G, W, A) {
+    const tot = G.gib;
+    const w = Math.min(r.wGiB, tot), rt = A.nonTorch + r.act, kv = Math.max(0, r.kvGiB), cg = A.graphs;
+    let segs = [['w', w], ['rt', rt], ['kv', kv], ['cg', cg]];
+    let used = 0; const out = [];
+    for (const [c, v] of segs) { const room = Math.max(0, tot - used); const vv = Math.min(v, room); if (vv > 0) out.push([c, vv]); used += v; }
+    const over = Math.max(0, used - tot);
+    $('#vbar').innerHTML = out.map(([c, v]) => `<div class="${c}" style="flex:0 0 ${(v / tot) * 100}%"></div>`).join('') + (over > 0 ? '' : '');
+    $('#vbar').setAttribute('aria-label', `Weights ${gib(r.wGiB)}, runtime ${gib(rt)}, KV ${gib(kv)}, CUDA graphs ${gib(cg)} of ${gib(tot)}`);
+    const bp = Math.min(100, (r.budget / tot) * 100);
+    const b = $('#budget'); b.style.left = bp + '%'; b.querySelector('span').textContent = `util ${W.util} → ${gib(r.budget)}`;
+    $('#vram-sub').textContent = `${gib(tot)} visible to CUDA${r.tp > 1 ? ` · ×${r.tp} GPUs` : ''}`;
+    const free = tot - Math.min(used, tot);
+    const leg = [
+      ['var(--s-w)', 'Weights', gib(r.wGiB)],
+      ['var(--s-rt)', 'Runtime: non-torch + activation peak', `${gib(A.nonTorch)} + ${gib(r.act)}`],
+      ['var(--s-kv)', 'KV cache', r.kvGiB > 0 ? gib(r.kvGiB) : 'none left'],
+      ['repeating-linear-gradient(135deg, var(--s-cg) 0 3px, transparent 3px 5px)', 'CUDA graphs (after KV sizing)', gib(cg)],
+      [over > 0 ? 'var(--s-over)' : 'var(--s-free)', over > 0 ? 'Over the card' : 'Unused', over > 0 ? `+${gib(over)}` : gib(free)],
+    ];
+    $('#vleg').innerHTML = leg.map(([c, l, v]) => `<div><span class="sw" style="background:${c}"></span><span class="lbl">${l}</span><span class="val">${v}</span></div>`).join('');
+  }
+
+  function fig(k, v, s) { return `<div class="fig"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${s}</span></div>`; }
+  function renderFigs(M, r, G, W) {
+    const tpTxt = r.tp > 1 ? ' per GPU' : '';
+    const perGiB = Math.floor(1073741824 / r.kvTok);
+    const itl = r.itl1;
+    const pf = r.prefill;
+    const pfBound = r.step(0, 0, Math.min(W.inTok, r.maxBT), W.inTok / 2).bound;
+    $('#figs').innerHTML = [
+      fig('Weights' + tpTxt, gib(r.wGiB), `${gb(r.wBytes)} · ${sig(M.total / 1e9)}B params in ${FMT[W.wfmt].label.split(' ·')[0]}`),
+      fig('KV per token' + tpTxt, bytesKiB(r.kvTok), `${nf(perGiB)} tokens per GiB · 2 × ${M.L} × ${nf(r.kvhG, r.kvhG % 1 ? 1 : 0)} × ${M.hd} × ${r.kvBytes} B`),
+      fig('KV cache', r.kvTokens > 0 ? `${nf(r.kvTokens)} <small>tok</small>` : '0', r.kvTokens > 0 ? `${gib(r.kvGiB)} · ${nf(r.blocks)} blocks of 16 · ${nf(r.kvTokens / W.maxLen, 2)}× max-model-len` : 'no room after weights'),
+      fig('Requests in flight', nf(r.fullReq), `full ${nf(W.inTok + W.outTok)}-token requests · max-num-seqs ${nf(r.maxSeqs)}`),
+      fig('Decode, 1 user', `${dur(itl.total)} <small>/tok</small>`, `${rate(1 / itl.total)} tok/s · ${BOUND[itl.bound].toLowerCase()} bound`),
+      fig(`Prefill ${nf(W.inTok)} tokens`, dur(pf.t), `alone on the GPU · ${pf.steps > 1 ? `${pf.steps} chunks · ` : ''}${BOUND[pfBound].toLowerCase()} bound`),
+    ].join('');
+  }
+
+  function renderTable(rows, r, W, G) {
+    const tb = $('#tbl tbody');
+    const showCost = G.price > 0;
+    tb.innerHTML = rows.map((s, i) => {
+      if (!s) return `<tr><td>—</td><td colspan="8" class="note">No request fits in the KV cache.</td></tr>`;
+      let note = '';
+      if (s.limit === 'kv') note = `${nf(s.C - s.running)} queued · KV full, vLLM over-admits and preempts`;
+      else if (s.limit === 'seqs') note = `${nf(s.C - s.running)} queued · max-num-seqs cap`;
+      if (s.capped) note += (note ? ' · ' : '') + 'prefill share capped by max-batched-tok';
+      const b = s.st.bound;
+      return `<tr><td>${nf(s.C)}</td><td>${nf(s.running)}</td><td>${W.pattern === 'cohort' ? `${dur(s.st.total)}<span class="muted"> / ${dur(s.st.chunkT)}</span>` : dur(s.st.total)}</td>
+        <td><span class="chip c-${b}"><i></i>${BOUND[b]}</span></td><td>${rate(s.thr)}</td><td>${rate(s.perUser)}</td><td>${dur(s.ttft)}</td>
+        <td>${showCost ? '€' + nf(s.cost, s.cost < 1 ? 3 : 2) : '<span class="muted">set price</span>'}</td><td class="note">${note}</td></tr>`;
+    }).join('');
+    $('#tbl-hint').textContent = W.pattern === 'cohort'
+      ? 'Cohorts: a batch of prompts is prefilled in max-batched-tok chunks (the second step time), then decodes alone (the first). Decodes stall during the chunks. TTFT includes queueing for a slot.'
+      : 'Smooth arrivals: each step carries the in-flight decodes plus their share of new prompts (input ÷ output tokens of prefill per decode). TTFT includes queueing for a slot.';
+    $('#chart-sub').textContent = `${W.pattern === 'cohort' ? 'cohorts' : 'smooth arrivals'} · ${$('#eff-peak').checked ? 'peak specs' : 'achievable'}`;
+  }
+
+  // ---------- chart ----------
+  let chartPts = [], chartGeom = null;
+  function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; }
+  function renderChart(r, conc) {
+    const svg = $('#chart');
+    const Wd = 680, Ht = 240, m = { l: 58, r: 18, t: 18, b: 36 };
+    const maxC = Math.max(64, ...conc);
+    const xmax = Math.pow(2, Math.ceil(Math.log2(maxC)));
+    const set = new Set(conc);
+    for (let c = 1; c <= xmax; c *= 2) set.add(c);
+    if (r.fullReq >= 1 && r.fullReq <= xmax) set.add(r.fullReq);
+    chartPts = [...set].sort((a, b) => a - b).map((C) => { const s = r.steady(C); return s ? { C, thr: s.thr, pu: s.perUser, run: s.running, list: conc.includes(C) } : null; }).filter(Boolean);
+    if (!chartPts.length) { svg.innerHTML = `<text x="${Wd / 2}" y="${Ht / 2}" text-anchor="middle" class="t-lab">Nothing to plot: no request fits.</text>`; chartGeom = null; return; }
+    const raw = Math.max(...chartPts.map((p) => p.thr)) * 1.05;
+    const tick = (() => { const s = raw / 4, p = Math.pow(10, Math.floor(Math.log10(s))), n = s / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; })();
+    const nt = Math.max(1, Math.ceil(raw / tick)), ymax = nt * tick;
+    const X = (c) => m.l + (Math.log2(c) / Math.log2(xmax)) * (Wd - m.l - m.r);
+    const Y = (v) => Ht - m.b - (v / ymax) * (Ht - m.t - m.b);
+    let g = '';
+    for (let i = 0; i <= nt; i++) { const v = tick * i, y = Y(v); g += `<line class="${i ? 'grid' : 'base'}" x1="${m.l}" x2="${Wd - m.r}" y1="${y}" y2="${y}"/><text class="t-axis" x="${m.l - 8}" y="${y + 4}" text-anchor="end">${v === 0 ? '0' : v < 10 ? nf(v, 1) : nf(v)}</text>`; }
+    const step = xmax > 256 ? 2 : 1; let i = 0;
+    for (let c = 1; c <= xmax; c *= 2, i++) if (i % step === 0 || c === xmax) g += `<text class="t-axis" x="${X(c)}" y="${Ht - m.b + 16}" text-anchor="middle">${c}</text>`;
+    g += `<text class="t-lab" x="${(m.l + Wd - m.r) / 2}" y="${Ht - 4}" text-anchor="middle">concurrent requests (log scale)</text>`;
+    g += `<text class="t-lab" x="12" y="${m.t - 4}">tok/s</text>`;
+    if (r.fullReq >= 1 && r.fullReq <= xmax) { const x = X(r.fullReq); const right = x > Wd - 150; g += `<line class="kvrule" x1="${x}" x2="${x}" y1="${m.t}" y2="${Ht - m.b}"/><text class="t-kv" x="${right ? x - 6 : x + 6}" y="${m.t + 10}" text-anchor="${right ? 'end' : 'start'}">KV full · ${nf(r.fullReq)} in flight</text>`; }
+    const d = chartPts.map((p, j) => `${j ? 'L' : 'M'}${X(p.C).toFixed(1)},${Y(p.thr).toFixed(1)}`).join('');
+    const area = `${d}L${X(chartPts[chartPts.length - 1].C).toFixed(1)},${Y(0)}L${X(chartPts[0].C).toFixed(1)},${Y(0)}Z`;
+    g += `<path class="area" d="${area}"/><path class="ln" d="${d}"/>`;
+    g += chartPts.filter((p) => p.list).map((p) => `<circle class="dot" cx="${X(p.C)}" cy="${Y(p.thr)}" r="4"/>`).join('');
+    g += `<g id="xh" visibility="hidden"><line class="xh" y1="${m.t}" y2="${Ht - m.b}"/><circle class="dot" r="5"/></g>`;
+    g += `<rect x="${m.l}" y="${m.t}" width="${Wd - m.l - m.r}" height="${Ht - m.t - m.b}" fill="transparent" id="hit"/>`;
+    svg.innerHTML = g;
+    chartGeom = { X, Y, Wd, Ht, m };
+  }
+  function chartHover(ev) {
+    if (!chartGeom || !chartPts.length) return;
+    const svg = $('#chart'), rect = svg.getBoundingClientRect();
+    const sx = ((ev.clientX - rect.left) / rect.width) * chartGeom.Wd;
+    let best = chartPts[0], bd = Infinity;
+    chartPts.forEach((p) => { const dd = Math.abs(chartGeom.X(p.C) - sx); if (dd < bd) { bd = dd; best = p; } });
+    const x = chartGeom.X(best.C), y = chartGeom.Y(best.thr);
+    const xh = svg.querySelector('#xh'); xh.setAttribute('visibility', 'visible');
+    const ln = xh.querySelector('line'); ln.setAttribute('x1', x); ln.setAttribute('x2', x);
+    const c = xh.querySelector('circle'); c.setAttribute('cx', x); c.setAttribute('cy', y);
+    const tip = $('#tip'); tip.hidden = false;
+    tip.innerHTML = `<b>${nf(best.C)}</b> concurrent · ${nf(best.run)} in flight<br><b>${rate(best.thr)}</b> tok/s total · <b>${rate(best.pu)}</b> per user`;
+    const wrap = $('#chartwrap').getBoundingClientRect();
+    const px = rect.left - wrap.left + (x / chartGeom.Wd) * rect.width, py = rect.top - wrap.top + (y / chartGeom.Ht) * rect.height;
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.min(Math.max(8, px - tw / 2), wrap.width - tw - 8) + 'px';
+    tip.style.top = Math.max(4, py - tip.offsetHeight - 12) + 'px';
+  }
+  function chartLeave() { const xh = $('#chart').querySelector('#xh'); if (xh) xh.setAttribute('visibility', 'hidden'); $('#tip').hidden = true; }
+
+  // ---------- arithmetic ----------
+  function row(t, eq, why) { return `<div><dt>${t}</dt><dd><span class="eq">${eq}</span>${why ? `<span class="why">${why}</span>` : ''}</dd></div>`; }
+  function renderMath(M, r, G, W, A) {
+    const tp = r.tp, tpd = tp > 1 ? ` ÷ ${tp} GPUs` : '';
+    const B = (x) => `${sig(x / 1e9)} B`;
+    const out = [];
+    if (M.E > 0) {
+      out.push(row('Parameters', `${M.L} layers × (dense ${sig(M.dense / 1e6)} M + ${M.E} experts × ${sig(M.expert / 1e6)} M) + embed ${B(M.embed)}${M.head ? ` + lm_head ${B(M.head)}` : ''} = ${B(M.total)}`,
+        `Active per token: ${M.L} × (${sig(M.dense / 1e6)} M + ${M.k} × ${sig(M.expert / 1e6)} M) + embeddings = ${B(M.active)}. Memory holds every expert; compute uses the active ones.`));
+    } else {
+      out.push(row('Parameters', `${M.L} layers × ${sig(M.dense / 1e6)} M (attention ${sig(M.attn / 1e6)} M + MLP ${sig((M.dense - M.attn) / 1e6)} M) + embed ${B(M.embed)}${M.head ? ` + lm_head ${B(M.head)}` : ' (tied)'} = ${B(M.total)}`,
+        `Linear layers: ${B(M.linTotal)}. FLOPs per token ≈ 2 × ${B(M.linActive)} + lm_head 2 × ${sig(M.vocab * M.h / 1e6)} M = ${flops(2 * M.linActive + 2 * M.vocab * M.h)}.`));
+    }
+    out.push(row('Weights in VRAM', `(${B(M.linTotal)} × ${nf(r.bpp, 4)} B + ${B(M.embed + M.head + M.norms)} × 2 B)${tpd} = ${gb(r.wBytes)} = ${gib(r.wGiB)}`,
+      'Quantized formats shrink only the transformer-block linear layers. Embeddings, lm_head and norms stay BF16.'));
+    const s1 = r.itl1;
+    out.push(row('Read per decode step', `${M.E > 0 ? `attention + router + ${sig(s1.touched)} of ${M.E} experts per layer (1 token)` : 'all linear weights'} + lm_head ${gb(M.vocab * M.h * 2 / tp)} = ${gb(s1.bytesLin)}${tp > 1 ? ' per GPU' : ''}`,
+      M.E > 0 ? `With B tokens in a step, experts touched ≈ ${M.E} × (1 − (1 − ${M.k}/${M.E})^B), assuming uniform routing: ${sig(M.E * (1 - Math.pow(1 - M.k / M.E, 64)))} at B = 64, so batched MoE decode reads almost every expert.` : 'Read once per step and shared by every request in the batch. The embedding lookup reads one row per token, which is negligible.'));
+    out.push(row('KV per token', `2 (K, V) × ${M.L} layers × ${nf(r.kvhG, r.kvhG % 1 ? 1 : 0)} KV heads${tp > 1 ? '/GPU' : ''} × ${M.hd} × ${r.kvBytes} B = ${nf(r.kvTok)} B = ${bytesKiB(r.kvTok)}`,
+      `--kv-cache-dtype auto keeps BF16 even with FP8 weights. One GiB holds ${nf(Math.floor(1073741824 / r.kvTok))} tokens.`));
+    out.push(row('Activation peak', A.act > 0 ? `${gib(r.act)} (your value)` : `${nf(r.maxBT)} batched tokens × (3 × ${nf(Math.round(M.iEff / tp))} + 5 × ${nf(M.h)}) × 2 B = ${gib(r.actAuto)}`,
+      'Profiled by vLLM with a dummy max-batched-tok forward pass. The formula is fitted to the H100 run (1.57 GiB measured); replace it with your log value.'));
+    out.push(row('KV budget', `${W.util} × ${nf(G.gib, 2)} − ${nf(r.wGiB, 2)} weights − ${nf(A.nonTorch, 2)} non-torch − ${nf(r.act, 2)} activations = ${gib(r.kvGiB)}`,
+      'This is the line vLLM logs as “Available KV cache memory”. CUDA graphs are captured afterwards and are not subtracted.'));
+    out.push(row('KV tokens', `${gib(Math.max(0, r.kvGiB))} ÷ (16 × ${bytesKiB(r.kvTok)}) = ${nf(r.blocks)} blocks → ${nf(r.kvTokens)} tokens`,
+      `Full requests: ${nf(r.kvTokens)} ÷ (${nf(W.inTok)} + ${nf(W.outTok)}) = ${nf(r.fullReq)}. vLLM's “Maximum concurrency” line: ${nf(r.kvTokens)} ÷ ${nf(W.maxLen)} = ${nf(r.kvTokens / W.maxLen, 2)}×.`));
+    const bw = `${sig(r.BW / 1e12)} TB/s`, tfl = `${nf(r.TFl / 1e12)} TFLOPS`;
+    out.push(row('Decode, 1 user', `GEMMs max(${flops(s1.flopsLin)} ÷ ${tfl}, ${gb(s1.bytesLin)} ÷ ${bw}) = ${dur(s1.tLin)} + attention max(…, ${nf(r.ctxAvg)} tok × ${bytesKiB(r.kvTok)} ÷ ${bw}) = ${dur(s1.tAtt)}${s1.comm ? ` + all-reduce ${dur(s1.comm)}` : ''} → ${dur(s1.total)}`,
+      `Average context during decode = input + output ÷ 2 = ${nf(r.ctxAvg)} tokens. Rates are ${$('#eff-peak').checked ? 'peak' : `peak × ${Math.round(r.effB * 100)} % (bandwidth) and × ${Math.round(r.effC * 100)} % (compute)`}.`));
+    const p = r.plateau;
+    if (p) {
+      if (W.pattern === 'cohort') {
+        out.push(row('Saturation (cohorts)', `${nf(p.st.chunks)} prefill steps × ${dur(p.st.chunkT)} + ${nf(W.outTok)} decode steps × ${dur(p.st.total)} = ${dur(p.st.cycle)} per cohort → ${nf(p.running)} × ${nf(W.outTok)} ÷ ${dur(p.st.cycle)} = ${rate(p.thr)} tok/s`,
+          'A cohort of prompts arrives at once. Prefill runs as compute-bound chunks, then decodes run weight- and KV-read bound with idle tensor cores.'));
+      } else {
+        const st = p.st;
+        out.push(row('Saturation step', `${sig(st.T - (st.T / (1 + W.inTok / W.outTok)) * W.inTok / W.outTok)} decode + ${sig((st.T / (1 + W.inTok / W.outTok)) * W.inTok / W.outTok)} prefill tokens: GEMMs max(${flops(st.flopsLin)} ÷ ${tfl}, ${gb(st.bytesLin)} ÷ ${bw}) = ${dur(st.tLin)} + attention ${dur(st.tAtt)}${st.comm ? ` + all-reduce ${dur(st.comm)}` : ''} = ${dur(st.total)} → ${rate(p.thr)} tok/s`,
+          `Each finished request is replaced by a new prompt, so every step also prefills ${nf(W.inTok / W.outTok, 1)} tokens per decode. That turns the GEMMs compute-bound well before the KV cache fills.`));
+      }
+      if (r.decodeOnlyCeil) { const dc = r.decodeOnlyCeil; out.push(row('Decode-only ceiling', `${nf(Math.min(r.fullReq, r.maxSeqs))} decodes, no prefill: ${dur(dc.total)} per step → ${rate(Math.min(r.fullReq, r.maxSeqs) / dc.total)} tok/s`, 'Ignores the prompts entirely. This was the mistake in the first prediction table (~3,250 tok/s on the H100).')); }
+      out.push(row('Longest step', `${nf(p.running)} decodes + ${nf(Math.max(0, r.maxBT - p.running))} prefill tokens (max-batched-tok full) = ${dur(p.longStep)}`,
+        'When many prompts arrive together, every running request waits this long for its next token. This is what drives inter-token latency p95 under bursty load.'));
+      if (G.price > 0) {
+        const api = A.apiOut + (W.inTok / W.outTok) * A.apiIn;
+        out.push(row('Cost', `€${nf(G.price, 2)}/h × ${tp} ÷ (${rate(p.thr)} tok/s × 3,600) × 10⁶ = €${nf(p.cost, 3)} per M output tokens`,
+          api > 0 ? `Managed API for the same requests: $${nf(A.apiOut, 2)} + ${nf(W.inTok / W.outTok, 1)} × $${nf(A.apiIn, 2)} = $${nf(api, 2)} ≈ €${nf(api * A.fx, 2)} per M output tokens. The input tokens count too. Self-hosting wins only while the GPU stays saturated.` : 'Set the API prices in Assumptions to compare.'));
+      }
+    }
+    $('#math').innerHTML = out.join('');
+  }
+
+  // ---------- reference check ----------
+  function renderRef() {
+    const cfg = MODELS.find((m) => m.id === 'qwen3-32b');
+    const M = deriveModel({ ...cfg, mode: 'arch', E: 0, k: 0, moeInter: 0 });
+    const G = GPUS.find((g) => g.id === 'h100-pcie');
+    const W = { wfmt: 'fp8', kvfmt: 'auto', tp: 1, inTok: 1024, outTok: 256, maxLen: 8192, util: 0.9, maxSeqs: 0, maxBT: 0, pattern: 'smooth' };
+    const A = { peak: false, effB: 0.8, effC: 0.6, nonTorch: 1.0, act: 0, graphs: 2.0, lat: 20, linkBW: 20 };
+    const r = engine(M, G, W, A), rc = engine(M, G, { ...W, pattern: 'cohort' }, A);
+    const rows = [
+      ['Weights', gib(r.wGiB), '31.97 GiB checkpoint · “Model loading took 32.07 GiB”'],
+      ['Activation peak', gib(r.act), '1.57 GiB'],
+      ['KV cache', `${gib(r.kvGiB)} · ${nf(r.kvTokens)} tok`, '36.68 GiB · 150,240 tokens'],
+      ['Max concurrency at 8,192', `${nf(r.kvTokens / 8192, 2)}×`, '18.34×'],
+      ['In flight at saturation', nf(r.fullReq), '115–125 (Grafana)'],
+      ['Decode step, 1 user', dur(r.itl1.total), '≈ 20.5 ms (DRAM active 0.795 × 16.4 ms floor)'],
+      ['Plateau, smooth / cohorts', `${rate(r.plateau.thr)} / ${rate(rc.plateau.thr)} tok/s`, '~1,100 tok/s (vllm bench, closed loop)'],
+      ['Longest step', dur(r.plateau.longStep), 'ITL p95 600–800 ms'],
+    ];
+    $('#reftbl tbody').innerHTML = rows.map((x) => `<tr><td class="note" style="color:var(--ink)">${x[0]}</td><td>${x[1]}</td><td class="note">${x[2]}</td></tr>`).join('');
+    $('#refgap').textContent = `Memory matches the log to within 0.5 %. Throughput doesn't: the benchmark ran in cohorts (${rate(rc.plateau.thr)} tok/s modeled) and lost the rest to preemption recompute (~0.9/s) and the 350 W power cap of the PCIe card under compute-bound prefill. Setting compute reached to ~40 % reproduces ~1,100 tok/s.`;
+  }
+
+  // ---------- events ----------
+  function init() {
+    buildSelects();
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) {}
+    loadDefaults();
+    if (s) { try { restore(s); } catch (e) { loadDefaults(); } }
+    $('#model').addEventListener('change', (e) => {
+      const v = e.target.value;
+      if (v === 'count') { const d = deriveModel(readInputs().spec); $('#f-totalB').value = +(d.total / 1e9).toFixed(2); $('#f-activeB').value = d.E > 0 ? +(d.active / 1e9).toFixed(2) : ''; setMode('count'); $('#arch-d').open = true; }
+      else if (v === 'custom') { setMode('arch'); $('#arch-d').open = true; }
+      else applyModelPreset(v);
+      render();
+    });
+    $('#gpu').addEventListener('change', (e) => { if (e.target.value === 'custom') $('#gpu-d').open = true; else applyGpuPreset(e.target.value); render(); });
+    $('#link').addEventListener('change', (e) => { applyLink(e.target.value); render(); });
+    document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener('change', () => { $('#model').value = el.value === 'count' ? 'count' : 'custom'; render(); }));
+    ARCH.concat(['tied']).forEach((k) => $('#f-' + k).addEventListener('input', () => { if (!$('#mode-count').checked) $('#model').value = 'custom'; render(); }));
+    ['#f-totalB', '#f-activeB'].forEach((sel) => $(sel).addEventListener('input', () => { $('#model').value = 'count'; render(); }));
+    GSPEC.forEach((k) => $('#g-' + k).addEventListener('input', () => { if (k !== 'price') $('#gpu').value = 'custom'; render(); }));
+    document.querySelectorAll('.inputs input, .inputs select').forEach((el) => {
+      if (!el.id || el.id.startsWith('f-') || el.id.startsWith('g-') || ['model', 'gpu', 'link'].includes(el.id)) return;
+      el.addEventListener('input', render); el.addEventListener('change', render);
+    });
+    $('#reset').addEventListener('click', () => { try { localStorage.removeItem(LS); } catch (e) {} loadDefaults(); render(); });
+    $('#loadref').addEventListener('click', () => { loadDefaults(); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    const svg = $('#chart');
+    svg.addEventListener('pointermove', chartHover); svg.addEventListener('pointerdown', chartHover); svg.addEventListener('pointerleave', chartLeave);
+    render();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
