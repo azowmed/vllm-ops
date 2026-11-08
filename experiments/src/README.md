@@ -17,6 +17,7 @@ All commands are run **from the repo root**. Each run writes to
 
 ```
 src/
+├── instance.sh                LAPTOP: setup / shell / fetch a fresh GPU instance (see Fast path)
 ├── env.example                copy to <repo root>/.env (git-ignored)
 ├── scripts/
 │   ├── _common.sh             shared defaults, .env loader, run folder (GPU/RUN)
@@ -71,6 +72,36 @@ src/
 - On your laptop, for the Bedrock part only: Python 3.10+,
   `pip install aws-bedrock-token-generator openai`, and AWS credentials that
   can mint a Bedrock token.
+
+---
+
+## Fast path: one command from the laptop
+
+The instance **never needs GitHub access**. `instance.sh` pushes this repo to it
+with `rsync` over your SSH key (`~/.ssh/gpu_hosts` by default, override with
+`SSH_KEY`). Results come back the same way, and you commit them from the laptop.
+
+```bash
+# 1. Create the instance in the Scaleway console, with your SSH key and the GPU OS image.
+# 2. Set up: sync the repo, install .env, pre-flight, monitoring, start vLLM, wait until ready.
+RUN=2026-11-10_fp8-kv KV_CACHE_DTYPE=fp8 ./experiments/src/instance.sh setup <ip>
+# 3. SSH in with the tunnel (vLLM :8000, Grafana :3000, Prometheus :9090), then run the sweep.
+./experiments/src/instance.sh shell <ip>
+bash experiments/src/scripts/03_bench_sweep.sh          # (on the instance)
+# 4. End of session: snapshot Prometheus into the run, pull experiments/ back.
+./experiments/src/instance.sh fetch <ip>
+python experiments/src/analysis/summarize.py --run-dir experiments/h100/2026-11-10_fp8-kv
+# 5. Commit, then DELETE the instance.
+```
+
+`.env` comes from the repo-root `.env` on the laptop if you keep one
+(git-ignored), otherwise from `env.example`. `GPU`, `RUN`, `KV_CACHE_DTYPE` and
+`CONCURRENCIES` given on the command line override it, and `RUN` is required.
+The first `setup` on a fresh instance spends most of its time in `02`,
+downloading the ~34 GB model. If SSH drops during that wait, vLLM keeps running:
+`shell` in and re-run `02_wait_ready.sh`.
+
+The manual steps below are what `instance.sh` runs. They are kept as a reference.
 
 ---
 
