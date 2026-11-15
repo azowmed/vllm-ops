@@ -79,10 +79,10 @@ DCGM profiling data (DRAM / tensor-core activity) was missing for part of these 
 
 ![cost.png](charts/cost.png)
 
+![telemetry_c512.png](charts/telemetry_c512.png)
+
 ![telemetry_c1024.png](charts/telemetry_c1024.png)
 
 ![telemetry_c2048.png](charts/telemetry_c2048.png)
-
-![telemetry_c512.png](charts/telemetry_c512.png)
 
 

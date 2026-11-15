@@ -58,7 +58,7 @@ Measured facts to drop into findings/predictions.md:
 
 ![telemetry_c1.png](charts/telemetry_c1.png)
 
-![telemetry_c128.png](charts/telemetry_c128.png)
+![telemetry_c8.png](charts/telemetry_c8.png)
 
 ![telemetry_c16.png](charts/telemetry_c16.png)
 
@@ -66,6 +66,6 @@ Measured facts to drop into findings/predictions.md:
 
 ![telemetry_c64.png](charts/telemetry_c64.png)
 
-![telemetry_c8.png](charts/telemetry_c8.png)
+![telemetry_c128.png](charts/telemetry_c128.png)
 
 

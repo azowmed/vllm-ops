@@ -144,9 +144,9 @@
       "rows_with_dcgm": 649,
       "rows": 649
     },
-    "c128": {
-      "rows_with_dcgm": 539,
-      "rows": 539
+    "c8": {
+      "rows_with_dcgm": 127,
+      "rows": 127
     },
     "c16": {
       "rows_with_dcgm": 96,
@@ -160,9 +160,9 @@
       "rows_with_dcgm": 287,
       "rows": 287
     },
-    "c8": {
-      "rows_with_dcgm": 127,
-      "rows": 127
+    "c128": {
+      "rows_with_dcgm": 539,
+      "rows": 539
     }
   }
 }
