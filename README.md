@@ -33,4 +33,8 @@ history.
 | GPU | Run | Status |
 |---|---|---|
 | H100 PCIe 80 GB (Scaleway) | [`2026-10-20_bf16-kv`](experiments/h100/2026-10-20_bf16-kv/) | Done. Concurrency 1024 and 2048 are invalid (the client ran out of file descriptors) |
-| L40S 48 GB (Scaleway) | — | Planned |
+| L40S 48 GB (Scaleway) | [`2026-11-15_bf16-kv`](experiments/l40s/2026-11-15_bf16-kv/) | Done. BF16 KV cache, concurrency 1–128, no errors |
+| L40S 48 GB (Scaleway) | [`2026-11-15_fp8-kv`](experiments/l40s/2026-11-15_fp8-kv/) | Done. FP8 KV cache, concurrency 1–128, no errors |
+
+In every run so far, the DCGM telemetry (DRAM and tensor-core activity) has a
+resolution of 30 s, the dcgm-exporter default, so short events are smoothed out.
