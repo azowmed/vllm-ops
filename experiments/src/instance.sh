@@ -11,14 +11,14 @@
 # experiments/src/env.example. GPU / RUN / KV_CACHE_DTYPE / CONCURRENCIES given in
 # the environment override it. RUN must be set one way or the other.
 #
-# SSH: user root, key $SSH_KEY (default ~/.ssh/gpu_hosts). A passphrase is asked
+# SSH: user root, key $SSH_KEY (default ~/.ssh/scaleway_gpu). A passphrase is asked
 # ONCE: the key is loaded into ssh-agent for $SSH_KEY_TTL, and every connection
 # then runs in BatchMode (never prompts). Scaleway reuses IPs across instances,
 # so `setup` forgets the old host key for that IP first.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-: "${SSH_KEY:=${HOME}/.ssh/gpu_hosts}"
+: "${SSH_KEY:=${HOME}/.ssh/scaleway_gpu}"
 : "${SSH_USER:=root}"
 : "${REMOTE_DIR:=vllm-ops}"            # relative to the remote home
 : "${SSH_KEY_TTL:=8h}"                # how long ssh-agent keeps the unlocked key

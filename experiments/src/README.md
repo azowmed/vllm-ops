@@ -78,7 +78,7 @@ src/
 ## Fast path: one command from the laptop
 
 The instance **never needs GitHub access**. `instance.sh` pushes this repo to it
-with `rsync` over your SSH key (`~/.ssh/gpu_hosts` by default, override with
+with `rsync` over your SSH key (`~/.ssh/scaleway_gpu` by default, override with
 `SSH_KEY`). Results come back the same way, and you commit them from the laptop.
 
 ```bash
