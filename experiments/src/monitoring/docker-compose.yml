@@ -55,6 +55,8 @@ services:
       - /etc/dcgm-exporter/custom-counters.csv   # our counter set incl. DCGM_FI_PROF_*
       - -a
       - 127.0.0.1:9400                           # loopback only
+      - -c
+      - "1000"                                   # collect every 1 s (default 30 s: 06's 1 Hz CSV repeated values)
     deploy:
       resources:
         reservations:
