@@ -249,12 +249,15 @@ can hold:
   capacity and max concurrency, at a small accuracy cost.
 
 Measure each dtype as its own run (separate `RUN` names), restarting the server
-between them:
+between them. Switch runs by editing `.env` on the instance: `_common.sh` loads
+`.env` after reading the environment, so a value in `.env` overrides one given
+on the command line.
 
 ```bash
-RUN=2026-11-02_fp8-kv KV_CACHE_DTYPE=fp8 bash experiments/src/scripts/01_start_vllm.sh
-RUN=2026-11-02_fp8-kv bash experiments/src/scripts/02_wait_ready.sh
-RUN=2026-11-02_fp8-kv bash experiments/src/scripts/03_bench_sweep.sh
+sed -i 's/^RUN=.*/RUN=2026-11-15_fp8-kv/; s/^KV_CACHE_DTYPE=.*/KV_CACHE_DTYPE=fp8/' .env
+bash experiments/src/scripts/01_start_vllm.sh
+bash experiments/src/scripts/02_wait_ready.sh
+bash experiments/src/scripts/03_bench_sweep.sh
 ```
 
 ## Error handling
