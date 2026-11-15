@@ -180,10 +180,18 @@ def line_plot(out_dir, fname, title, ylabel, series):
     return path
 
 
+def telemetry_files(results_dir):
+    """telemetry_c<N>.csv sorted by concurrency (c1, c8, c16, c128), not alphabetically."""
+    def level(path):
+        m = re.search(r"telemetry_c(\d+)\.csv$", os.path.basename(path))
+        return int(m.group(1)) if m else 0
+    return sorted(glob.glob(os.path.join(results_dir, "telemetry_c*.csv")), key=level)
+
+
 def telemetry_coverage(results_dir):
     """{level: (rows_with_dcgm, rows)} from telemetry_c*.csv (no matplotlib needed)."""
     cov = {}
-    for path in sorted(glob.glob(os.path.join(results_dir, "telemetry_c*.csv"))):
+    for path in telemetry_files(results_dir):
         level = re.search(r"telemetry_(c\d+)\.csv$", os.path.basename(path))
         level = level.group(1) if level else os.path.basename(path)
         with open(path) as fh:
@@ -196,7 +204,7 @@ def telemetry_plots(results_dir, out_dir):
     made = []
     if not HAVE_MPL:
         return made
-    for path in sorted(glob.glob(os.path.join(results_dir, "telemetry_c*.csv"))):
+    for path in telemetry_files(results_dir):
         level = re.search(r"telemetry_(c\d+)\.csv$", os.path.basename(path))
         level = level.group(1) if level else os.path.basename(path)
         t0 = None
