@@ -11,14 +11,17 @@
 # experiments/src/env.example. GPU / RUN / KV_CACHE_DTYPE / CONCURRENCIES given in
 # the environment override it. RUN must be set one way or the other.
 #
-# SSH: user root, key $SSH_KEY (default ~/.ssh/gpu_hosts). Scaleway reuses IPs
-# across instances, so `setup` forgets the old host key for that IP first.
+# SSH: user root, key $SSH_KEY (default ~/.ssh/gpu_hosts). A passphrase is asked
+# ONCE: the key is loaded into ssh-agent for $SSH_KEY_TTL, and every connection
+# then runs in BatchMode (never prompts). Scaleway reuses IPs across instances,
+# so `setup` forgets the old host key for that IP first.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 : "${SSH_KEY:=${HOME}/.ssh/gpu_hosts}"
 : "${SSH_USER:=root}"
 : "${REMOTE_DIR:=vllm-ops}"            # relative to the remote home
+: "${SSH_KEY_TTL:=8h}"                # how long ssh-agent keeps the unlocked key
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -26,10 +29,31 @@ die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 cmd="${1:-}"; ip="${2:-}"
 [[ -n "${cmd}" && -n "${ip}" ]] || die "usage: $0 setup|shell|fetch <instance-ip>"
 
-ssh_opts=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ConnectTimeout=10)
+ssh_opts=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ConnectTimeout=10 -o BatchMode=yes)
 [[ -f "${SSH_KEY}" ]] && ssh_opts+=(-i "${SSH_KEY}" -o IdentitiesOnly=yes)
 target="${SSH_USER}@${ip}"
 rsh() { ssh "${ssh_opts[@]}" "${target}" "$@"; }
+
+cleanup=()
+trap 'for c in "${cleanup[@]+"${cleanup[@]}"}"; do eval "${c}"; done' EXIT
+
+# Unlock $SSH_KEY once into ssh-agent (starting a temporary agent if none runs).
+unlock_key() {
+  [[ -f "${SSH_KEY}" ]] || return 0
+  local pub="${SSH_KEY}.pub" fp
+  [[ -f "${pub}" ]] || pub="${SSH_KEY}"
+  fp="$(ssh-keygen -lf "${pub}" 2>/dev/null | awk '{print $2}')"
+  if [[ -z "${SSH_AUTH_SOCK:-}" ]] || { ssh-add -l >/dev/null 2>&1; [[ $? -eq 2 ]]; }; then
+    eval "$(ssh-agent -s)" >/dev/null
+    cleanup+=('ssh-agent -k >/dev/null 2>&1')
+  fi
+  if [[ -n "${fp}" ]] && ssh-add -l 2>/dev/null | grep -qF "${fp}"; then
+    return 0                                        # already unlocked
+  fi
+  log "Unlocking ${SSH_KEY} (asked once, kept in ssh-agent for ${SSH_KEY_TTL})"
+  ssh-add -t "${SSH_KEY_TTL}" "${SSH_KEY}" || die "Could not unlock ${SSH_KEY}."
+}
+unlock_key
 
 # Build the .env to install: laptop .env (or env.example) + overrides from the environment.
 make_env() {
@@ -49,10 +73,22 @@ make_env() {
 
 case "${cmd}" in
 setup)
+  # Build .env first: a missing RUN fails here, before touching the instance.
+  envfile="$(mktemp)"; cleanup+=("rm -f '${envfile}'")
+  make_env "${envfile}"
   ssh-keygen -R "${ip}" >/dev/null 2>&1 || true
-  log "Waiting for SSH on ${ip}..."
-  for _ in $(seq 1 60); do rsh true 2>/dev/null && break; sleep 5; done
-  rsh true || die "SSH to ${target} failed (key ${SSH_KEY})."
+  log "Waiting for SSH on ${ip} (up to 5 min)..."
+  for i in $(seq 1 60); do
+    if out="$(rsh true 2>&1)"; then break; fi
+    case "${out}" in   # the host answered but refused us: retrying won't help
+      *"Permission denied"*) die "SSH to ${target} refused the key ${SSH_KEY}:
+${out}";;
+    esac
+    (( i == 60 )) && die "SSH to ${target} not reachable after 5 min:
+${out}"
+    (( i % 6 == 0 )) && log "  still waiting ($(( i * 5 ))s): ${out##*$'\n'}"
+    sleep 5
+  done
 
   log "Syncing the repo to ${target}:${REMOTE_DIR}/"
   rsh 'command -v rsync >/dev/null || (apt-get update -qq && apt-get install -y -qq rsync >/dev/null)'
@@ -61,8 +97,6 @@ setup)
     --exclude .venv/ --exclude experiments/src/monitoring/.offline-run/ \
     "${REPO}/" "${target}:${REMOTE_DIR}/"
 
-  envfile="$(mktemp)"; trap 'rm -f "${envfile}"' EXIT
-  make_env "${envfile}"
   scp -q "${ssh_opts[@]}" "${envfile}" "${target}:${REMOTE_DIR}/.env"
   rsh "grep -E '^(GPU|RUN)=' ${REMOTE_DIR}/.env" >&2
 
