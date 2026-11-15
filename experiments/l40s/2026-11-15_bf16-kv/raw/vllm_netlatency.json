@@ -1,0 +1,15 @@
+{
+  "target": "vllm",
+  "base_url": "http://127.0.0.1:8000",
+  "probe_url": "http://127.0.0.1:8000/v1/models",
+  "client_hostname": "scw-objective-ganguly",
+  "cloud_provider": "scaleway",
+  "cloud_zone": "pl-waw-2",
+  "samples": [
+    {"time_connect_s": 0.000110, "time_ttfb_s": 0.001425, "http_code": 200},
+    {"time_connect_s": 0.000083, "time_ttfb_s": 0.000828, "http_code": 200},
+    {"time_connect_s": 0.000079, "time_ttfb_s": 0.000737, "http_code": 200}
+  ],
+  "min_time_connect_s": 0.000079,
+  "min_time_ttfb_s": 0.000737
+}
